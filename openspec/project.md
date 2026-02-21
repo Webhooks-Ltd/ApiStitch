@@ -30,7 +30,7 @@ See [Product Brief](../docs/strategy/01-product-brief.md) for full context.
 - **Type resolver**: Resolves OpenAPI schemas to C# types. Checks explicit YAML mappings first, then namespace exclusions, then attribute-based discovery (Roslyn), then falls back to generating the type.
 - **MSBuild task**: Primary delivery mechanism. NuGet package ships .props/.targets. Incremental builds via Inputs/Outputs. Generated code goes to obj/.
 - **CLI tool**: Secondary delivery. Same generation engine, invoked via `dotnet apistitch generate`.
-- **Configuration**: YAML file (openapi-stitch.yaml) with MSBuild property overrides for simple cases.
+- **Configuration**: YAML file (apistitch.yaml) with MSBuild property overrides for simple cases.
 
 ## Reflection Policy
 
