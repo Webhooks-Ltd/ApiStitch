@@ -1,0 +1,12 @@
+#nullable enable
+using System.CodeDom.Compiler;
+using System.Text.Json.Serialization;
+
+namespace {{ namespace }};
+
+{{~ for type_name in type_names ~}}
+[JsonSerializable(typeof({{ type_name }}))]
+{{~ end ~}}
+[GeneratedCode("ApiStitch", null)]
+[JsonSourceGenerationOptions]
+public partial class {{ context_name }} : JsonSerializerContext;

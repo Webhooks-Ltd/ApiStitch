@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: Edge Cases
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    EmptyObject:
+      type: object
+    StringAlias:
+      type: string
+    IntAlias:
+      type: integer
+      format: int32
+    StringArray:
+      type: array
+      items:
+        type: string
+    Node:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'
+        parent:
+          $ref: '#/components/schemas/Node'
+    AllTypes:
+      type: object
+      properties:
+        str:
+          type: string
+        dateTime:
+          type: string
+          format: date-time
+        date:
+          type: string
+          format: date
+        uuid:
+          type: string
+          format: uuid
+        uri:
+          type: string
+          format: uri
+        int32:
+          type: integer
+        int64:
+          type: integer
+          format: int64
+        float:
+          type: number
+          format: float
+        double:
+          type: number
+        decimal:
+          type: number
+          format: decimal
+        bool:
+          type: boolean
+        bytes:
+          type: string
+          format: byte
+    DeprecatedSchema:
+      type: object
+      deprecated: true
+      properties:
+        old_field:
+          type: string
+          deprecated: true

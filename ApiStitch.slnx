@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ApiStitch/ApiStitch.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ApiStitch.IntegrationTests/ApiStitch.IntegrationTests.csproj" />
+    <Project Path="tests/ApiStitch.Tests/ApiStitch.Tests.csproj" />
+  </Folder>
+</Solution>
