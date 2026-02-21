@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Composition Test
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    Animal:
+      type: object
+      required: [name, species]
+      properties:
+        name:
+          type: string
+        species:
+          type: string
+    Dog:
+      allOf:
+        - $ref: '#/components/schemas/Animal'
+        - type: object
+          required: [breed]
+          properties:
+            breed:
+              type: string
+            isGoodBoy:
+              type: boolean
+    Cat:
+      allOf:
+        - $ref: '#/components/schemas/Animal'
+        - type: object
+          properties:
+            indoor:
+              type: boolean
+            livesLeft:
+              type: integer
+              format: int32
+    MixedBreed:
+      allOf:
+        - $ref: '#/components/schemas/Dog'
+        - type: object
+          properties:
+            breeds:
+              type: array
+              items:
+                type: string
+    PetOwner:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        pets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Animal'

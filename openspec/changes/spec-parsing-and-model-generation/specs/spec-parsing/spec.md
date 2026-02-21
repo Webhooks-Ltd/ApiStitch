@@ -31,7 +31,7 @@ The system SHALL convert Microsoft.OpenApi parser warnings into ApiStitch diagno
 
 ### Requirement: Reject unsupported OpenAPI versions
 
-The system SHALL reject OpenAPI 2.0 (Swagger) and OpenAPI 3.1 documents with a clear error diagnostic.
+The system SHALL reject OpenAPI 2.0 (Swagger) and OpenAPI 3.1 documents with a clear error diagnostic. Microsoft.OpenApi 1.6.x does not support OpenAPI 3.1; it throws an exception which is surfaced as an error diagnostic.
 
 #### Scenario: OpenAPI 2.0 spec provided
 - **WHEN** an OpenAPI 2.0 (Swagger) spec is provided
@@ -39,7 +39,7 @@ The system SHALL reject OpenAPI 2.0 (Swagger) and OpenAPI 3.1 documents with a c
 
 #### Scenario: OpenAPI 3.1 spec provided
 - **WHEN** an OpenAPI 3.1 spec is provided
-- **THEN** the system returns an error diagnostic with code `AS102` and a message indicating OpenAPI 3.1 is not yet supported
+- **THEN** the system returns an error diagnostic with code `AS100` and a message indicating the version is not supported (surfaced from Microsoft.OpenApi exception)
 
 ### Requirement: Extract component schemas from parsed documents
 

@@ -1,0 +1,21 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+using System.Runtime.Serialization;
+using System.Text.Json.Serialization;
+
+namespace {{ namespace }};
+
+[GeneratedCode("ApiStitch", null)]
+[JsonConverter(typeof(JsonStringEnumConverter<{{ name }}>))]
+{{- if is_deprecated }}
+[Obsolete]
+{{- end }}
+public enum {{ name }}
+{
+{{~ for member in members ~}}
+    [EnumMember(Value = "{{ member.wire_value }}")]
+    {{ member.csharp_name }}{{ if !for.last }},{{ end }}
+
+{{~ end ~}}
+}

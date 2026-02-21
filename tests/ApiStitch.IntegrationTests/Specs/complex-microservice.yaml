@@ -1,0 +1,191 @@
+openapi: 3.0.3
+info:
+  title: Order Management Service
+  version: 2.0.0
+paths: {}
+components:
+  schemas:
+    Order:
+      type: object
+      required: [id, customer, items, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer:
+          $ref: '#/components/schemas/Customer'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+    Customer:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        loyaltyTier:
+          $ref: '#/components/schemas/LoyaltyTier'
+    OrderItem:
+      type: object
+      required: [productId, quantity, unitPrice]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        discount:
+          $ref: '#/components/schemas/Money'
+          nullable: true
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+    Address:
+      type: object
+      required: [line1, city, country]
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+        state:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+        country:
+          type: string
+    OrderStatus:
+      type: string
+      enum: [draft, confirmed, processing, shipped, delivered, cancelled]
+    LoyaltyTier:
+      type: string
+      enum: [bronze, silver, gold, platinum]
+    PagedResult:
+      type: object
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        pageSize:
+          type: integer
+          format: int32
+        page:
+          type: integer
+          format: int32
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerEmail:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        total:
+          $ref: '#/components/schemas/Money'
+        itemCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+    AuditEntry:
+      type: object
+      required: [timestamp, action, actor]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+        actor:
+          type: string
+        details:
+          type: string
+          nullable: true
+    ShippingInfo:
+      type: object
+      properties:
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+          nullable: true
+        estimatedDelivery:
+          type: string
+          format: date
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+    WebhookPayload:
+      type: object
+      required: [eventType, timestamp, data]
+      properties:
+        eventType:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties:
+            type: string
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        uptime:
+          type: string
+          format: duration

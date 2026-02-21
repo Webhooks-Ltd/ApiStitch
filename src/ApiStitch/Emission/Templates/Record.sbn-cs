@@ -1,0 +1,36 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+{{- if has_collections }}
+using System.Collections.Generic;
+{{- end }}
+{{- if has_additional_properties }}
+using System.Text.Json;
+{{- end }}
+using System.Text.Json.Serialization;
+
+namespace {{ namespace }};
+
+{{- if is_deprecated }}
+[Obsolete]
+{{- end }}
+[GeneratedCode("ApiStitch", null)]
+public {{ if is_sealed }}sealed {{ end }}partial record {{ name }}{{ if base_name }} : {{ base_name }}{{ end }}
+{
+{{~ for prop in properties ~}}
+{{~ if prop.is_deprecated ~}}
+    [Obsolete]
+{{~ end ~}}
+    [JsonPropertyName("{{ prop.json_name }}")]
+    public {{ if prop.is_required }}required {{ end }}{{ prop.type_name }}{{ if prop.is_nullable && !prop.type_is_reference }}?{{ end }} {{ prop.csharp_name }} { get; init; }
+
+{{~ end ~}}
+{{~ if has_additional_properties ~}}
+{{~ if additional_properties_comment ~}}
+    // ApiStitch: {{ additional_properties_comment }}
+{{~ end ~}}
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalProperties { get; init; }
+
+{{~ end ~}}
+}
