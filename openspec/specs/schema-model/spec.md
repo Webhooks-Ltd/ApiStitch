@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Semantic model for the API surface. Transforms OpenAPI component schemas into a language-agnostic representation covering objects, arrays, primitives, enums, allOf composition (flattening and detected inheritance), nullable/required modifiers, circular reference detection, inline schema hoisting, and PascalCase naming.
+
+## Requirements
 
 ### Requirement: Transform object schemas to ApiSchema with Kind Object
 

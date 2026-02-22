@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+YAML configuration parsing for ApiStitch generation pipeline. Loads settings from `apistitch.yaml` including spec path, output namespace, and output directory. Validates required properties, applies sensible defaults, and is extensible for future configuration options.
+
+## Requirements
 
 ### Requirement: Load configuration from a YAML file
 
