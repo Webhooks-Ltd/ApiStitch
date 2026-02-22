@@ -33,8 +33,8 @@ OpenAPI client generator for .NET that doesn't duplicate your existing types. MI
 ### NuGet Package Description (1-2 sentences)
 ```
 ApiStitch generates clean, idiomatic C# clients from OpenAPI specs with first-class type reuse.
-Map schemas to your existing types, choose Refit or typed HttpClient output, and get
-System.Text.Json source generation — all via MSBuild with zero manual steps. .NET 8+.
+Map schemas to your existing types, get typed HttpClient wrappers with zero third-party runtime deps,
+and System.Text.Json source generation — all via MSBuild with zero manual steps. .NET 8+.
 ```
 
 ### Conference Talk Subtitle
@@ -78,7 +78,7 @@ This table goes in the GitHub README. It is deliberately honest about where ApiS
 | **Type reuse (schema-to-type mapping)** | No ([#3912](https://github.com/microsoft/kiota/issues/3912) — Not Planned) | Name-based exclusion only | No | Type exclusion only | **Yes, first-class** |
 | **Serializer** | Custom IParsable | Newtonsoft.Json | Varies | Via NSwag (Newtonsoft) | **System.Text.Json source gen** |
 | **Code readability** | ["Not a goal"](https://github.com/microsoft/kiota/issues/4330) | Medium | Low | High (Refit interfaces) | **High (records, required, nullable)** |
-| **Output styles** | 1 (Kiota clients) | 1 (partial classes) | 1 (per template) | 1 (Refit) | **1 (Refit); 2 more planned** |
+| **Output styles** | 1 (Kiota clients) | 1 (partial classes) | 1 (per template) | 1 (Refit) | **1 (typed HttpClient); 2 more planned** |
 | **MSBuild integration** | No native .targets | Yes (VS/CLI inconsistencies) | No (JVM) | Source generator | **Yes, gRPC-style obj/ output** |
 | **Setup complexity** | 6-7 NuGet pkgs + auth provider | JSON config (hundreds of options) | JVM + CLI + templates | NuGet + attribute | **Single NuGet + YAML** |
 | **IHttpClientFactory + IHttpClientBuilder** | No native integration | Partial (no IHttpClientBuilder) | Varies | Via Refit | **Yes, returns IHttpClientBuilder** |
@@ -91,7 +91,7 @@ This table goes in the GitHub README. It is deliberately honest about where ApiS
 **Note on including all competitors**: The table includes four competitors because the .NET OpenAPI generator space is fragmented and developers actively compare all of them. Each column earns its place: Kiota (Microsoft's official tool), NSwag (the incumbent), OpenAPI Generator (the polyglot option), Refitter (the rising alternative). Excluding any would leave an obvious gap.
 
 ### Post-MVP Table Updates
-After each release tier ships, update the table. Change Refit-only to "Refit + typed HttpClient." Add new capability rows as features land. This creates a visible momentum signal. Never add features to the table before they ship.
+After each release tier ships, update the table. Change typed HttpClient-only to "typed HttpClient + extension methods." Add new capability rows as features land. This creates a visible momentum signal. Never add features to the table before they ship.
 
 ---
 
@@ -110,8 +110,8 @@ After each release tier ships, update the table. Change Refit-only to "Refit + t
 1. Open with the pain. Two paragraphs about the specific problems encountered: shared DTOs duplicated by NSwag, Kiota's IParsable incompatibility with System.Text.Json, the boilerplate of hand-written clients across microservices. Name the GitHub issues. This is not opinion — it is documented, community-verified pain.
 2. Acknowledge what existing tools got right. NSwag created the category and served the .NET community for years. Kiota is ambitious in its multi-language scope. Refitter's interface-based approach is elegant. Respect the work. This sentence buys credibility for everything that follows.
 3. Explain the approach. Type reuse via YAML mapping and namespace exclusion. Clean C# records with System.Text.Json source gen. MSBuild integration with output in obj/. Technical details, not marketing.
-4. Be explicit about what ApiStitch does NOT do yet. No typed HttpClient output (coming in MVP). No oneOf/anyOf (coming in v1). No OpenAPI 2.0. This honesty is the differentiator between a credible project and vaporware.
-5. Show the generated code. Paste a real before/after: the YAML config with type mappings and the resulting Refit interface. Let the code speak for itself.
+4. Be explicit about what ApiStitch does NOT do yet. No extension method output (coming in MVP). No Refit output (coming in v1 if demand materialises). No oneOf/anyOf (coming in v1). No OpenAPI 2.0. This honesty is the differentiator between a credible project and vaporware.
+5. Show the generated code. Paste a real before/after: the YAML config with type mappings and the resulting typed HttpClient wrapper. Let the code speak for itself.
 6. Ask for feedback. "What schemas or patterns do your specs use that I should test against? What would you need to see before trying this?" This transforms promotion into conversation.
 7. Link to the repo at the end, not the beginning.
 
@@ -196,11 +196,11 @@ Show HN: ApiStitch – Clean C# clients from OpenAPI specs, with type reuse and 
 > - OpenAPI Generator requires a JVM and produces non-idiomatic .NET code
 > - Refitter (1.2M downloads, growing fast) generates clean Refit interfaces but relies on NSwag internally for models
 >
-> ApiStitch takes a different approach: you tell it which OpenAPI schemas map to your existing C# types (via YAML config or namespace exclusion), and it generates only the HTTP client code — clean Refit interfaces or typed HttpClient wrappers with System.Text.Json source generation.
+> ApiStitch takes a different approach: you tell it which OpenAPI schemas map to your existing C# types (via YAML config or namespace exclusion), and it generates only the HTTP client code — typed HttpClient wrappers with zero third-party runtime deps and System.Text.Json source generation.
 >
-> What it does today: Refit interface generation, type mapping, MSBuild integration (output in obj/, like Grpc.Tools), System.Text.Json source gen, OpenAPI 3.0 core schemas.
+> What it does today: typed HttpClient wrapper generation, type mapping, MSBuild integration (output in obj/, like Grpc.Tools), System.Text.Json source gen, OpenAPI 3.0 core schemas.
 >
-> What it doesn't do yet: typed HttpClient output, oneOf/anyOf, OpenAPI 2.0, CLI tool. These are planned but not shipped. The README comparison table shows "Planned" honestly.
+> What it doesn't do yet: extension method output, Refit output, oneOf/anyOf, OpenAPI 2.0, CLI tool. These are planned but not shipped. The README comparison table shows "Planned" honestly.
 >
 > The code is MIT-licensed and I'm the sole maintainer. I'm especially interested in feedback from anyone who has given up on code generation and hand-writes HTTP clients — that's the audience I'm trying to reach.
 
@@ -234,7 +234,7 @@ Kiota is built by a Microsoft team with legitimate multi-language ambitions. NSw
 The MMVP handles a subset of OpenAPI schemas. The first real-world spec a user throws at it will expose gaps. Calling it production-ready and having someone's build break on an unhandled schema pattern will destroy trust faster than any competitor could.
 
 **Wrong**: "ApiStitch is a production-ready OpenAPI client generator."
-**Right**: "ApiStitch generates clean Refit clients from OpenAPI 3.0 specs with type reuse. It handles the common 80% of schema patterns. It's alpha software — I'm looking for early adopters who will test it against their real specs and report what breaks."
+**Right**: "ApiStitch generates clean typed HttpClient wrappers from OpenAPI 3.0 specs with type reuse. It handles the common 80% of schema patterns. It's alpha software — I'm looking for early adopters who will test it against their real specs and report what breaks."
 
 Label the maturity clearly:
 - MMVP: "Alpha — handles core OpenAPI 3.0 patterns. Try it on your spec and tell me what's missing."
@@ -252,15 +252,15 @@ Label the maturity clearly:
 
 The comparison table has "Planned" tags. Blog posts can mention the roadmap. But do not cite typed HttpClient output or oneOf/anyOf support as reasons to adopt today. Users who adopt on a promise and hit the gap will be more frustrated than users who knew the limitation upfront.
 
-**Wrong**: "ApiStitch supports Refit, typed HttpClient, and extension method output styles."
-**Right**: "ApiStitch ships with Refit interface generation today. Typed HttpClient output is next in the MVP milestone."
+**Wrong**: "ApiStitch supports typed HttpClient, extension methods, and Refit output styles."
+**Right**: "ApiStitch ships with typed HttpClient wrappers today. Extension method output is next in the MVP milestone. Refit output is planned for v1."
 
 ### 5.5 Do Not Use Corporate Marketing Language
 
 The audience is developers evaluating a code generator. They will reject polish and respond to substance.
 
 **Wrong**: "ApiStitch empowers development teams to seamlessly integrate OpenAPI specifications into their .NET solutions with next-generation type-safe code generation."
-**Right**: "ApiStitch reads your OpenAPI spec, maps schemas to types you already have, and generates Refit interfaces. The generated code goes in obj/ and you never think about it again."
+**Right**: "ApiStitch reads your OpenAPI spec, maps schemas to types you already have, and generates typed HttpClient wrappers. The generated code goes in obj/ and you never think about it again."
 
 ### 5.6 Do Not Dismiss the "Just Hand-Write It" Crowd
 
@@ -300,7 +300,7 @@ The goal of Phase 1 is to get the repo in front of early adopters primed from Ph
 | # | Action | Channel | Success Metric | Notes |
 |---|--------|---------|----------------|-------|
 | 1.1 | Push MMVP to GitHub with complete README (comparison table, quickstart, generated code samples, type mapping example) | GitHub | N/A — prerequisite for everything else | The README is the landing page. Include a real before/after showing type reuse. Spend as much time on it as on a blog post. |
-| 1.2 | Publish NuGet package (pre-release: `0.1.0-alpha`) | NuGet | Package live, metadata optimized | Pre-release tag sets honest expectations. Tags: openapi, swagger, code-generator, refit, type-reuse. |
+| 1.2 | Publish NuGet package (pre-release: `0.1.0-alpha`) | NuGet | Package live, metadata optimized | Pre-release tag sets honest expectations. Tags: openapi, swagger, code-generator, httpclient, type-reuse. |
 | 1.3 | Publish **Blog Post 3** ("Type Reuse in OpenAPI Code Generation: Three Approaches") | Personal blog, Dev.to | 50+ HN points, 20+ r/dotnet comments | The launch announcement disguised as a technical article. |
 | 1.4 | Post to **r/dotnet** | Reddit | 100+ upvotes, 30+ comments, 50+ GitHub stars within 72 hours | Follow the structure in section 4.1 exactly. |
 | 1.5 | Recruit 3-5 beta testers from the r/dotnet thread | Reddit DMs, GitHub Discussions | 3+ people testing ApiStitch with their own specs within 2 weeks | The real validation: does the generator handle real-world specs? Every failure is a high-priority bug report. |
@@ -326,7 +326,7 @@ The goal of Phase 3 is to convert launch attention into sustained organic growth
 | 3.1 | Publish a monthly "ApiStitch Dev Log" blog post | Personal blog, Dev.to | Consistent 20+ upvotes per post | Shows momentum. Each post highlights new schema support, output improvements, or community contributions. |
 | 3.2 | Submit conference talk to .NET Conf 2026, NDC, or regional conferences | Conference CFPs | 1+ talk accepted | Use the abstract from section 4.3. |
 | 3.3 | Publish beta tester case study | Personal blog | 1 case study: "How [team] uses ApiStitch with their Blazor WASM app" | Social proof. A real team with a real codebase using type reuse in production. |
-| 3.4 | Ship MVP milestone and announce | r/dotnet, HN, Twitter | 50+ upvotes, 100+ new stars | The MVP announcement is a second launch moment. Now with typed HttpClient output and schema overrides. |
+| 3.4 | Ship MVP milestone and announce | r/dotnet, HN, Twitter | 50+ upvotes, 100+ new stars | The MVP announcement is a second launch moment. Now with extension method output and schema overrides. |
 | 3.5 | Write a "Migrating from NSwag to ApiStitch" guide | Repo docs, personal blog | Appears in search for "NSwag alternative" | Directly captures switching intent. Provide a concrete migration path: map NSwag config to ApiStitch YAML, show equivalent output. |
 
 ### Metrics Dashboard
@@ -357,16 +357,16 @@ The messaging should mature as the product matures. Do not use v1 messaging at M
 **What to emphasize**: Type reuse, clean output, the problems being solved, honesty about what's missing.
 **What to avoid**: Any claim of completeness, production-readiness, or superiority to established tools.
 
-Example: "ApiStitch is a new OpenAPI client generator for .NET 8+ that generates Refit interfaces with first-class type reuse. It's alpha software — it handles core OpenAPI 3.0 patterns and maps schemas to your existing C# types via YAML config. I'm looking for developers willing to test it against their real specs."
+Example: "ApiStitch is a new OpenAPI client generator for .NET 8+ that generates typed HttpClient wrappers with first-class type reuse and zero third-party runtime deps. It's alpha software — it handles core OpenAPI 3.0 patterns and maps schemas to your existing C# types via YAML config. I'm looking for developers willing to test it against their real specs."
 
 ### MVP Messaging (Beta)
 
 **Tone**: Confident, specific, evidence-backed.
 **Core message**: "Here's what we've shipped, here are the specs it handles, here's who's using it."
-**What to emphasize**: Two output styles (Refit + typed HttpClient), schema-level overrides, tag filtering, real-world spec compatibility, beta tester testimonials.
+**What to emphasize**: Two output styles (typed HttpClient + extension methods), schema-level overrides, tag filtering, real-world spec compatibility, beta tester testimonials.
 **What to avoid**: "Production-ready" without qualification. Still no "Kiota killer."
 
-Example: "ApiStitch now generates Refit interfaces and typed HttpClient wrappers from OpenAPI 3.0 and 3.1 specs, with type reuse, schema overrides, and tag filtering. Five teams are testing it against their production specs. The API is stabilizing toward v1."
+Example: "ApiStitch now generates typed HttpClient wrappers and extension methods from OpenAPI 3.0 and 3.1 specs, with type reuse, schema overrides, and tag filtering. Five teams are testing it against their production specs. The API is stabilizing toward v1."
 
 ### v1 Messaging (Stable)
 
@@ -375,7 +375,7 @@ Example: "ApiStitch now generates Refit interfaces and typed HttpClient wrappers
 **What to emphasize**: Full feature set, three output styles, three type reuse mechanisms, production case studies, the comparison table with all checkmarks filled.
 **What to avoid**: Complacency. v1 is when real competition begins.
 
-Example: "ApiStitch is a production-ready OpenAPI client generator for .NET 8+. First-class type reuse via YAML mapping, namespace exclusion, or attribute discovery. Refit, typed HttpClient, or extension method output. System.Text.Json source generation for AOT. OpenAPI 2.0, 3.0, and 3.1. MSBuild integration that works like Grpc.Tools. MIT licensed."
+Example: "ApiStitch is a production-ready OpenAPI client generator for .NET 8+. First-class type reuse via YAML mapping, namespace exclusion, or attribute discovery. Typed HttpClient, extension method, or Refit output. System.Text.Json source generation for AOT. OpenAPI 2.0, 3.0, and 3.1. MSBuild integration that works like Grpc.Tools. MIT licensed."
 
 ---
 

@@ -26,7 +26,7 @@ See [Product Brief](../docs/strategy/01-product-brief.md) for full context.
 
 - **Pipeline**: OpenAPI spec → Microsoft.OpenApi parse → Semantic model → Emitter → Generated C# source
 - **Semantic model**: Language-agnostic representation of the API surface (endpoints, schemas, parameters, responses). Decoupled from OpenAPI DOM and from output format.
-- **Emitters**: Per-output-style code generators that consume the semantic model. MMVP: Refit interface emitter. MVP: Typed HttpClient emitter. v1: Extension method emitter.
+- **Emitters**: Per-output-style code generators that consume the semantic model. MMVP: Typed HttpClient emitter. MVP: Extension method emitter. v1: Refit interface emitter (optional).
 - **Type resolver**: Resolves OpenAPI schemas to C# types. Checks explicit YAML mappings first, then namespace exclusions, then attribute-based discovery (Roslyn), then falls back to generating the type.
 - **MSBuild task**: Primary delivery mechanism. NuGet package ships .props/.targets. Incremental builds via Inputs/Outputs. Generated code goes to obj/.
 - **CLI tool**: Secondary delivery. Same generation engine, invoked via `dotnet apistitch generate`.
@@ -52,8 +52,8 @@ tests/
   ApiStitch.Tests/             # Unit tests
   ApiStitch.IntegrationTests/  # End-to-end generation tests against real specs
 samples/
-  Sample.RefitOutput/          # Refit interface output demo
-  Sample.TypedClient/          # Typed HttpClient output demo
+  Sample.TypedClient/          # Typed HttpClient output demo (MMVP)
+  Sample.ExtensionMethods/     # Extension method output demo (MVP)
   Sample.SharedModels/         # Type reuse demo (shared DTO project)
 ```
 
@@ -74,10 +74,10 @@ samples/
 
 ## Generated Output Dependencies (what consumers install)
 
-- Refit (when using Refit output style)
 - Microsoft.Extensions.Http (for IHttpClientFactory / DI extensions)
 - Microsoft.Extensions.DependencyInjection.Abstractions
 - System.Text.Json (already part of .NET 8+)
+- Refit (v1+, only when using Refit output style)
 
 ## Conventions
 
