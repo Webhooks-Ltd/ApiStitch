@@ -40,7 +40,7 @@ Building for Native AOT deployment — cloud functions, trimmed containers, high
 
 ### Emotional Jobs
 - **Confidence**: I want to point at the generated code and say "I could have written this by hand" — not apologize for it in code reviews.
-- **Control**: I want to choose the output style (Refit interfaces, typed clients, extension methods) that fits my team's conventions, not adapt my architecture to the generator's opinion.
+- **Control**: I want to choose the output style (typed clients, extension methods, Refit interfaces) that fits my team's conventions, not adapt my architecture to the generator's opinion.
 - **Relief**: I want to stop maintaining hand-written HttpClient wrappers because I finally have a generator I trust.
 
 ---
@@ -53,7 +53,7 @@ Building for Native AOT deployment — cloud functions, trimmed containers, high
 | **Serializer** | Custom IParsable (not System.Text.Json) | Newtonsoft.Json internally | Varies by template | Via NSwag (Newtonsoft) | **System.Text.Json with source gen** |
 | **Code readability** | "Not a goal" (official policy) | Medium (partial classes, boilerplate) | Low (template-dependent) | High (Refit interfaces) | **High (modern C# idioms)** |
 | **MSBuild integration** | No native .targets | Exists (VS/CLI inconsistencies) | No (JVM-based) | Source generator (writes to disk) | **Yes, gRPC-style obj/ output** |
-| **Output styles** | One (Kiota clients) | One (partial classes) | One (per template) | One (Refit interfaces) | **Three (Refit, typed client, extensions)** |
+| **Output styles** | One (Kiota clients) | One (partial classes) | One (per template) | One (Refit interfaces) | **Three (typed client, extensions, Refit)** |
 | **Setup complexity** | 6-7 NuGet packages + auth provider | JSON config with hundreds of options | JVM + CLI + templates | NuGet + attribute | **Single NuGet + YAML** |
 | **IHttpClientFactory** | No native integration | Yes | Varies | Via Refit | **Yes, returns IHttpClientBuilder** |
 | **CancellationToken** | Inconsistent | Optional | Varies | Via Refit | **Every method, always** |
@@ -82,8 +82,8 @@ These are the six capabilities that define ApiStitch's identity. Each one direct
 
 ### 5.3 Multiple Output Styles
 
-**What**: Choose between Refit interfaces, typed HttpClient wrappers (interface + implementation + DI extensions), or extension methods on HttpClient. Same engine, same spec, different output shapes.
-**Why**: Refit has 153.3M NuGet downloads — it is the most popular REST client pattern in .NET. But not every team uses Refit. Some want concrete HttpClient wrappers for maximum control and AOT compatibility. Some want lightweight extension methods for internal services. Every existing generator forces one style. ApiStitch lets the team choose what fits their codebase, not what fits the generator's architecture.
+**What**: Choose between typed HttpClient wrappers (interface + implementation + DI extensions), extension methods on HttpClient, or Refit interfaces. Same engine, same spec, different output shapes.
+**Why**: Typed HttpClient wrappers are the Microsoft-recommended pattern for IHttpClientFactory, require zero third-party runtime dependencies, and are fully AOT-compatible. Some teams want lightweight extension methods for internal services. Some want Refit interfaces for minimal generated code. Every existing generator forces one style. ApiStitch lets the team choose what fits their codebase, not what fits the generator's architecture.
 
 ### 5.4 Zero-Config MSBuild Integration
 
@@ -108,7 +108,7 @@ Explicit boundaries to prevent scope creep and set expectations.
 
 - **Not a multi-language tool.** C# and .NET only, by design. OpenAPI Generator covers 70+ languages poorly. ApiStitch covers one language well. Narrowing the target means every design decision optimizes for .NET idioms, MSBuild integration, and System.Text.Json — none of which are possible when supporting Java, Python, and TypeScript from the same engine.
 - **Not a server stub generator.** ApiStitch generates HTTP clients, not ASP.NET Core controllers. Server-side code generation is a different problem with different constraints (routing, middleware, model binding). Staying client-only keeps the scope tractable and the output focused.
-- **Not a replacement for Refit itself.** ApiStitch can generate Refit interfaces as one of its output styles. It doesn't replace Refit's runtime — it generates the interface definitions that Refit consumes. Teams already using Refit gain type reuse and MSBuild integration on top of their existing pattern.
+- **Not a Refit-first tool.** ApiStitch can generate Refit interfaces as one of its output styles, but the default output is typed HttpClient wrappers with zero third-party runtime dependencies. Refit output is available for teams that already use Refit and want type reuse and MSBuild integration on top of their existing pattern.
 - **Not an API design tool.** ApiStitch consumes OpenAPI specs. It does not help you write, validate, or lint specs. Tools like Spectral, Redocly, and Stoplight own that space. ApiStitch assumes you have a valid spec and generates a client from it.
 - **Not trying to support every OpenAPI edge case on day one.** The MMVP targets OpenAPI 3.0 and the common 80% of schema patterns: objects, arrays, enums, $ref, allOf for inheritance, nullable. Exotic features (oneOf discriminators, XML serialization, callbacks, links) are deferred until the core is stable and users report real needs.
 - **Not targeting legacy .NET.** .NET 8+ only. No .NET Framework, no .NET Standard, no conditional compilation. This enables records, required properties, init setters, file-scoped namespaces, and System.Text.Json source generators without compromise.

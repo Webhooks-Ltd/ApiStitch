@@ -7,7 +7,7 @@ A .NET OpenAPI client generator with first-class type reuse, clean idiomatic out
 Open-source alternative to Kiota, NSwag, and Refitter. Core differentiators:
 - First-class type reuse (map OpenAPI schemas to your existing C# types)
 - Clean, idiomatic C# output (records, required, nullable reference types, init setters)
-- Multiple output styles (Refit interfaces, typed HttpClient wrappers, extension methods)
+- Multiple output styles (typed HttpClient wrappers, extension methods, Refit interfaces)
 - Zero-config MSBuild integration (add NuGet package, point to spec, build)
 - System.Text.Json source generation for AOT/trimming compatibility
 - Production-ready HTTP patterns (IHttpClientFactory, IHttpClientBuilder, CancellationToken everywhere)
@@ -61,6 +61,22 @@ Avoid reflection. The generated output must be AOT/trimming compatible:
 - NSwag (no dependency on NSwag for model generation)
 - Entity Framework Core
 - Any Java/JVM tooling
+
+## Commit Convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+| Prefix | When |
+|---|---|
+| `feat:` | New capability / public API |
+| `fix:` | Bug fix |
+| `docs:` | README, XML docs |
+| `chore:` | CI, build, housekeeping |
+| `refactor:` | Internal restructuring |
+| `test:` | Tests only |
+| `feat!:` / `fix!:` | Breaking change |
+
+Lowercase after prefix, imperative mood, under 72 chars. Optional scope: `feat(generator): add inheritance support`.
 
 ## Conventions
 
