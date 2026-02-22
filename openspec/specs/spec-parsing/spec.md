@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Loading and validating OpenAPI 3.0 documents from local file paths via Microsoft.OpenApi. Supports JSON and YAML formats, reports parser warnings as diagnostics, rejects unsupported OpenAPI versions, and extracts component schemas for downstream transformation.
+
+## Requirements
 
 ### Requirement: Load OpenAPI 3.0 documents from local file paths
 

@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+C# code generation from the semantic model. Emits partial record types with modern idioms (required, init, nullable reference types), System.Text.Json attributes, enum serialization, inheritance, and a partial JsonSerializerContext for AOT-compatible source generation. Produces deterministic, diff-friendly output with one file per type.
+
+## Requirements
 
 ### Requirement: Emit object schemas as partial records with modern C# idioms
 
