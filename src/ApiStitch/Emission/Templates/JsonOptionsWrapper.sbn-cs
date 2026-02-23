@@ -1,0 +1,15 @@
+#nullable enable
+using System.CodeDom.Compiler;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace {{ namespace }};
+
+[GeneratedCode("ApiStitch", null)]
+internal sealed class {{ json_options_name }}
+{
+    public JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
+    {
+        TypeInfoResolver = {{ json_context_name }}.Default,
+    };
+}

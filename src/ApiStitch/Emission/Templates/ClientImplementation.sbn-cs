@@ -1,0 +1,115 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace {{ namespace }};
+
+[GeneratedCode("ApiStitch", null)]
+internal sealed partial class {{ class_name }} : {{ interface_name }}
+{
+    private const string HttpClientName = "{{ client_name }}";
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    public {{ class_name }}(IHttpClientFactory httpClientFactory, {{ json_options_name }} jsonOptions)
+    {
+        _httpClientFactory = httpClientFactory;
+        _jsonOptions = jsonOptions.Options;
+    }
+
+{{~ for op in operations ~}}
+{{~ if op.is_deprecated ~}}
+    [Obsolete]
+{{~ end ~}}
+    public async {{ op.return_type }} {{ op.method_name }}({{ for param in op.parameters }}{{ param.type_name }} {{ param.param_name }}{{ if !param.is_required }} = {{ param.default_value }}{{ end }}, {{ end }}CancellationToken cancellationToken = default)
+    {
+        using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+{{~ if op.has_query_params ~}}
+        var queryParams = new List<KeyValuePair<string, string?>>();
+{{~ for param in op.query_params ~}}
+{{~ if param.is_array ~}}
+        if ({{ param.param_name }} is not null)
+        {
+            foreach (var item in {{ param.param_name }})
+            {
+                queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
+            }
+        }
+{{~ else if param.is_required ~}}
+        queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
+{{~ else ~}}
+        if ({{ param.param_name }} is not null)
+            queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
+{{~ end ~}}
+{{~ end ~}}
+        var queryString = BuildQueryString(queryParams);
+{{~ end ~}}
+        using var request = new HttpRequestMessage(HttpMethod.{{ op.http_method }}, $"{{ op.path_template }}{{ if op.has_query_params }}{queryString}{{ end }}");
+{{~ for param in op.header_params ~}}
+{{~ if param.is_required ~}}
+        request.Headers.TryAddWithoutValidation("{{ param.wire_name }}", {{ param.to_string_expr }});
+{{~ else ~}}
+        if ({{ param.param_name }} is not null)
+            request.Headers.TryAddWithoutValidation("{{ param.wire_name }}", {{ param.to_string_expr }});
+{{~ end ~}}
+{{~ end ~}}
+{{~ if op.has_body ~}}
+        request.Content = JsonContent.Create({{ op.body_param_name }}, mediaType: null, _jsonOptions);
+{{~ end ~}}
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+{{~ if op.has_response_body ~}}
+        return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
+            _jsonOptions, cancellationToken).ConfigureAwait(false))!;
+{{~ end ~}}
+    }
+
+{{~ end ~}}
+{{~ if has_query_methods ~}}
+    private static string BuildQueryString(List<KeyValuePair<string, string?>> parameters)
+    {
+        if (parameters.Count == 0)
+            return string.Empty;
+
+        var sb = new StringBuilder("?");
+        for (var i = 0; i < parameters.Count; i++)
+        {
+            if (parameters[i].Value is null) continue;
+            if (sb.Length > 1) sb.Append('&');
+            sb.Append(Uri.EscapeDataString(parameters[i].Key));
+            sb.Append('=');
+            sb.Append(Uri.EscapeDataString(parameters[i].Value!));
+        }
+
+        return sb.Length == 1 ? string.Empty : sb.ToString();
+    }
+
+{{~ end ~}}
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        string? body = null;
+        if (response.Content.Headers.ContentLength is not 0)
+        {
+            using var reader = new StreamReader(
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false));
+            var buffer = new char[8192];
+            var read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            body = new string(buffer, 0, read);
+        }
+
+        throw new ApiException(response.StatusCode, body, response.Headers);
+    }
+}

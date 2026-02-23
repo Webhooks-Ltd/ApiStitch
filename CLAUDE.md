@@ -81,7 +81,8 @@ Lowercase after prefix, imperative mood, under 72 chars. Optional scope: `feat(g
 ## Conventions
 
 - Async all the way — every I/O method returns Task
-- No comments unless absolutely necessary
+- XML doc comments on all public types, members, and parameters
+- No inline comments unless absolutely necessary
 - CancellationToken on every async method in generated output
 - Generated files include [GeneratedCode("ApiStitch")] attribute (no version number to avoid diff noise)
 - YAML for configuration (openapi-stitch.yaml)

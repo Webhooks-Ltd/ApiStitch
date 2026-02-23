@@ -1,0 +1,35 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+
+namespace {{ namespace }};
+
+/// <summary>
+/// Exception thrown when an API call returns a non-success status code.
+/// </summary>
+[GeneratedCode("ApiStitch", null)]
+public sealed class ApiException : HttpRequestException
+{
+    /// <summary>
+    /// Creates a new <see cref="ApiException"/> with the specified status code and response details.
+    /// </summary>
+    public ApiException(HttpStatusCode statusCode, string? responseBody, HttpResponseHeaders? responseHeaders)
+        : base($"HTTP {(int)statusCode} ({statusCode})", inner: null, statusCode)
+    {
+        ResponseBody = responseBody;
+        ResponseHeaders = responseHeaders;
+    }
+
+    /// <summary>
+    /// The response body (truncated to 8KB), if available.
+    /// </summary>
+    public string? ResponseBody { get; }
+
+    /// <summary>
+    /// The response headers from the failed request.
+    /// </summary>
+    public HttpResponseHeaders? ResponseHeaders { get; }
+}

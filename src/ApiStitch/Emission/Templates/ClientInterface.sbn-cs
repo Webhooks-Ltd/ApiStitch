@@ -1,0 +1,20 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace {{ namespace }};
+
+[GeneratedCode("ApiStitch", null)]
+public partial interface {{ interface_name }}
+{
+{{~ for op in operations ~}}
+{{~ if op.is_deprecated ~}}
+    [Obsolete]
+{{~ end ~}}
+    {{ op.return_type }} {{ op.method_name }}({{ for param in op.parameters }}{{ param.type_name }} {{ param.param_name }}{{ if !param.is_required }} = {{ param.default_value }}{{ end }}, {{ end }}CancellationToken cancellationToken = default);
+
+{{~ end ~}}
+}
