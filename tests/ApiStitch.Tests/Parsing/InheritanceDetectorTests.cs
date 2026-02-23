@@ -43,7 +43,7 @@ public class InheritanceDetectorTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
         InheritanceDetector.Detect(spec);
 
         var animal = spec.Schemas.First(s => s.Name == "Animal");
@@ -82,7 +82,7 @@ public class InheritanceDetectorTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
         InheritanceDetector.Detect(spec);
 
         var extended = spec.Schemas.First(s => s.Name == "Extended");
@@ -115,7 +115,7 @@ public class InheritanceDetectorTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
         InheritanceDetector.Detect(spec);
 
         var derived1 = spec.Schemas.First(s => s.Name == "Derived1");

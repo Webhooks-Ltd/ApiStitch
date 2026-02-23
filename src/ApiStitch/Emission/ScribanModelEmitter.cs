@@ -22,7 +22,7 @@ public class ScribanModelEmitter : IModelEmitter
         _contextTemplate = LoadTemplate("JsonSerializerContext.sbn-cs");
     }
 
-    public (IReadOnlyList<GeneratedFile> Files, IReadOnlyList<Diagnostic> Diagnostics) Emit(ApiSpecification spec, ApiStitchConfig config)
+    public EmissionResult Emit(ApiSpecification spec, ApiStitchConfig config)
     {
         var files = new List<GeneratedFile>();
         var diagnostics = new List<Diagnostic>();
@@ -43,11 +43,11 @@ public class ScribanModelEmitter : IModelEmitter
             }
         }
 
-        files.Add(EmitJsonContext(typeNames, config));
+        files.Add(EmitJsonContext(typeNames, spec, config));
 
         files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.Ordinal));
 
-        return (files, diagnostics);
+        return new EmissionResult(files, diagnostics);
     }
 
     private GeneratedFile EmitRecord(ApiSchema schema, ApiSpecification spec, ApiStitchConfig config, List<Diagnostic> diagnostics)
@@ -117,15 +117,22 @@ public class ScribanModelEmitter : IModelEmitter
         return new GeneratedFile($"{schema.Name}.cs", content);
     }
 
-    private GeneratedFile EmitJsonContext(List<string> typeNames, ApiStitchConfig config)
+    private GeneratedFile EmitJsonContext(List<string> typeNames, ApiSpecification spec, ApiStitchConfig config)
     {
         var lastSegment = config.Namespace.Split('.').Last();
         var contextName = $"{lastSegment}JsonContext";
+
+        var collectionTypes = spec.CollectionTypes
+            .Select(s => s.CSharpTypeName ?? CSharpTypeMapper.MapSchema(s))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
 
         var model = new ScriptObject();
         model.Add("namespace", config.Namespace);
         model.Add("context_name", contextName);
         model.Add("type_names", typeNames.OrderBy(n => n, StringComparer.Ordinal).ToList());
+        model.Add("collection_types", collectionTypes);
+        model.Add("has_collections", collectionTypes.Count > 0);
 
         var context = new TemplateContext();
         context.PushGlobal(model);

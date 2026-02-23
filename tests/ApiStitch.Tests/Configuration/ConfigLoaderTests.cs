@@ -35,6 +35,8 @@ public class ConfigLoaderTests
         Assert.Equal("./petstore.yaml", config.Spec);
         Assert.Equal("ApiStitch.Generated", config.Namespace);
         Assert.Equal("./Generated", config.OutputDir);
+        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+        Assert.Null(config.ClientName);
     }
 
     [Fact]
@@ -102,5 +104,82 @@ public class ConfigLoaderTests
         var diag = Assert.Single(diagnostics);
         Assert.Equal("AS300", diag.Code);
         Assert.Contains("/nonexistent/path/apistitch.yaml", diag.Message);
+    }
+
+    [Fact]
+    public void OutputStyle_ExplicitTypedClient()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            outputStyle: TypedClient
+            """;
+
+        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+    }
+
+    [Fact]
+    public void OutputStyle_CaseInsensitive()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            outputStyle: typedclient
+            """;
+
+        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+    }
+
+    [Fact]
+    public void OutputStyle_UnknownValue_ReturnsError()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            outputStyle: Refit
+            """;
+
+        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.Null(config);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS303", diag.Code);
+        Assert.Contains("Refit", diag.Message);
+    }
+
+    [Fact]
+    public void ClientName_ExplicitValue()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            clientName: MyPetApi
+            """;
+
+        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.Equal("MyPetApi", config.ClientName);
+    }
+
+    [Fact]
+    public void ClientName_WhitespaceOnly_TreatedAsNull()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            clientName: "  "
+            """;
+
+        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.Null(config.ClientName);
     }
 }

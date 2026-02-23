@@ -36,7 +36,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         var pet = Assert.Single(spec.Schemas);
         Assert.Equal("Pet", pet.Name);
@@ -74,7 +74,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var order = spec.Schemas.First(s => s.Name == "Order");
         var pet = spec.Schemas.First(s => s.Name == "Pet");
@@ -109,7 +109,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
         var test = spec.Schemas.First(s => s.Name == "Test");
 
         var reqNonNull = test.Properties.First(p => p.Name == "reqNonNull");
@@ -144,7 +144,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var status = Assert.Single(spec.Schemas);
         Assert.Equal(SchemaKind.Enum, status.Kind);
@@ -168,7 +168,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         var priority = Assert.Single(spec.Schemas);
         Assert.Equal(SchemaKind.Primitive, priority.Kind);
@@ -196,7 +196,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var petList = spec.Schemas.First(s => s.Name == "PetList");
         Assert.Equal(SchemaKind.Array, petList.Kind);
@@ -219,7 +219,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var status = Assert.Single(spec.Schemas);
         Assert.Equal("PetStatus", status.Name);
@@ -247,7 +247,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var user = Assert.Single(spec.Schemas);
         Assert.Equal("FirstName", user.Properties.First(p => p.Name == "first_name").CSharpName);
@@ -285,7 +285,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var types = spec.Schemas.First(s => s.Name == "Types");
         Assert.Equal(PrimitiveType.String, types.Properties.First(p => p.Name == "str").Schema.PrimitiveType);
@@ -323,7 +323,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         var field = spec.Schemas.First().Properties.First();
         Assert.Equal(PrimitiveType.String, field.Schema.PrimitiveType);
@@ -354,7 +354,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var extended = spec.Schemas.First(s => s.Name == "Extended");
         Assert.Equal(SchemaKind.Object, extended.Kind);
@@ -381,7 +381,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var old = Assert.Single(spec.Schemas);
         Assert.True(old.IsDeprecated);
@@ -407,7 +407,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var pet = Assert.Single(spec.Schemas);
         Assert.Equal("A pet in the store", pet.Description);
@@ -428,7 +428,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         var empty = Assert.Single(spec.Schemas);
         Assert.Equal(SchemaKind.Object, empty.Kind);
@@ -450,7 +450,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var id = Assert.Single(spec.Schemas);
         Assert.Equal(SchemaKind.Primitive, id.Kind);
@@ -474,7 +474,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         Assert.NotNull(spec.Operations);
         Assert.Empty(spec.Operations);
@@ -498,7 +498,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         var node = spec.Schemas.First(s => s.Name == "Node");
         var childProp = node.Properties.First(p => p.Name == "child");
@@ -525,7 +525,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var dynamic = Assert.Single(spec.Schemas);
         Assert.True(dynamic.HasAdditionalProperties);
@@ -548,7 +548,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var simple = Assert.Single(spec.Schemas);
         Assert.False(simple.HasAdditionalProperties);
@@ -576,7 +576,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var hoisted = spec.Schemas.FirstOrDefault(s => s.Name == "OrderShippingAddress");
         Assert.NotNull(hoisted);
@@ -614,7 +614,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         Assert.True(diags.Any(d => d.Code == "AS202" || d.Code == "AS203"),
             "A name collision diagnostic (AS202 or AS203) should be emitted");
@@ -645,7 +645,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         Assert.Contains(diags, d => d.Code == "AS203");
         Assert.Equal(2, spec.Schemas.Count);
@@ -679,7 +679,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         Assert.Contains(diags, d => d.Code == "AS201");
         var extended = spec.Schemas.First(s => s.Name == "Extended");
@@ -717,7 +717,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         Assert.Contains(diags, d => d.Code == "AS003");
 
@@ -743,7 +743,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var status = Assert.Single(spec.Schemas);
         Assert.Equal("PetStatus", status.Name);
@@ -772,7 +772,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, _) = transformer.Transform(doc);
+        var (spec, _, _) = transformer.Transform(doc);
 
         var combined = Assert.Single(spec.Schemas);
         Assert.Equal(SchemaKind.Object, combined.Kind);
@@ -805,7 +805,7 @@ public class SchemaTransformerTests
             """);
 
         var transformer = new SchemaTransformer();
-        var (spec, diags) = transformer.Transform(doc);
+        var (spec, _, diags) = transformer.Transform(doc);
 
         Assert.Contains(diags, d => d.Code == "AS003");
 

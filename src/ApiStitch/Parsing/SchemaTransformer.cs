@@ -12,7 +12,11 @@ public class SchemaTransformer
     private readonly HashSet<string> _usedNames = new(StringComparer.Ordinal);
     private readonly Dictionary<OpenApiSchema, string> _componentSchemaNames = new(ReferenceEqualityComparer.Instance);
 
-    public (ApiSpecification Specification, IReadOnlyList<Diagnostic> Diagnostics) Transform(OpenApiDocument document)
+    /// <summary>
+    /// Transforms OpenAPI component schemas into the ApiStitch semantic model.
+    /// </summary>
+    /// <returns>The specification, a schema map for operation resolution, and diagnostics.</returns>
+    public (ApiSpecification Specification, IReadOnlyDictionary<OpenApiSchema, ApiSchema> SchemaMap, IReadOnlyList<Diagnostic> Diagnostics) Transform(OpenApiDocument document)
     {
         var componentSchemas = document.Components?.Schemas ?? new Dictionary<string, OpenApiSchema>();
 
@@ -44,7 +48,7 @@ public class SchemaTransformer
             Metadata = metadata
         };
 
-        return (spec, _diagnostics);
+        return (spec, _schemaMap, _diagnostics);
     }
 
     private ApiSchema TransformSchema(OpenApiSchema openApiSchema, string originalName, string source)

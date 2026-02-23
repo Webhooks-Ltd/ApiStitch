@@ -1,0 +1,47 @@
+#nullable enable
+using System;
+using System.CodeDom.Compiler;
+using System.Net.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+
+namespace {{ namespace }};
+
+/// <summary>
+/// Extension methods for registering {{ client_name }} services.
+/// </summary>
+[GeneratedCode("ApiStitch", null)]
+public static class {{ extensions_class_name }}
+{
+    /// <summary>
+    /// Adds the {{ client_name }} HTTP client and all tag clients to the service collection.
+    /// </summary>
+    public static IHttpClientBuilder Add{{ client_name }}(
+        this IServiceCollection services,
+        Action<{{ options_class_name }}> configure)
+    {
+        services.Configure(configure);
+        services.TryAddSingleton<{{ json_options_name }}>();
+
+        var builder = services.AddHttpClient("{{ client_name }}", (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<{{ options_class_name }}>>().Value;
+            if (options.BaseAddress is not null)
+                client.BaseAddress = options.BaseAddress;
+            if (options.Timeout is not null)
+                client.Timeout = options.Timeout.Value;
+            foreach (var header in options.DefaultHeaders)
+                client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+        });
+
+{{~ for client in tag_clients ~}}
+        services.TryAddTransient<{{ client.interface_name }}>(sp =>
+            new {{ client.class_name }}(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<{{ json_options_name }}>()));
+{{~ end ~}}
+
+        return builder;
+    }
+}

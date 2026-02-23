@@ -4,12 +4,12 @@ using ApiStitch.Model;
 namespace ApiStitch.Emission;
 
 /// <summary>
-/// Emits generated model code (records, enums, JSON serializer context) from the API specification.
+/// Emits generated client code (interfaces, implementations, DI registration, etc.) from the API specification.
 /// </summary>
-public interface IModelEmitter
+public interface IClientEmitter
 {
     /// <summary>
-    /// Generates model files from the specification and configuration.
+    /// Generates client files from the specification and configuration.
     /// </summary>
     EmissionResult Emit(ApiSpecification spec, ApiStitchConfig config);
 }
