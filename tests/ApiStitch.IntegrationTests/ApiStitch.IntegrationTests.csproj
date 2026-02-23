@@ -19,6 +19,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ApiStitch\ApiStitch.csproj" />
+    <ProjectReference Include="..\..\src\ApiStitch.Cli\ApiStitch.Cli.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

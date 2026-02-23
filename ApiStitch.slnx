@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ApiStitch/ApiStitch.csproj" />
+    <Project Path="src/ApiStitch.Cli/ApiStitch.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ApiStitch.IntegrationTests/ApiStitch.IntegrationTests.csproj" />

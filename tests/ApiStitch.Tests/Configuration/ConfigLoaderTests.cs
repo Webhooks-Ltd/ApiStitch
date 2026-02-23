@@ -1,5 +1,6 @@
 using ApiStitch.Configuration;
 using ApiStitch.Diagnostics;
+using ApiStitch.IO;
 
 namespace ApiStitch.Tests.Configuration;
 
@@ -14,7 +15,7 @@ public class ConfigLoaderTests
             outputDir: ./Output
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -28,7 +29,7 @@ public class ConfigLoaderTests
     {
         var yaml = "spec: ./petstore.yaml";
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -44,7 +45,7 @@ public class ConfigLoaderTests
     {
         var yaml = "namespace: MyApi.Models";
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.Null(config);
         var diag = Assert.Single(diagnostics);
@@ -59,7 +60,7 @@ public class ConfigLoaderTests
             spec: ""
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.Null(config);
         var diag = Assert.Single(diagnostics);
@@ -71,7 +72,7 @@ public class ConfigLoaderTests
     {
         var yaml = ": : : not valid yaml [[[";
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.Null(config);
         var diag = Assert.Single(diagnostics);
@@ -88,7 +89,7 @@ public class ConfigLoaderTests
             unknownThing: hello
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -98,7 +99,7 @@ public class ConfigLoaderTests
     [Fact]
     public void FileNotFound_ReturnsError()
     {
-        var (config, diagnostics) = ConfigLoader.Load("/nonexistent/path/apistitch.yaml");
+        var (config, _, diagnostics) = ConfigLoader.Load("/nonexistent/path/apistitch.yaml");
 
         Assert.Null(config);
         var diag = Assert.Single(diagnostics);
@@ -114,7 +115,7 @@ public class ConfigLoaderTests
             outputStyle: TypedClient
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -129,7 +130,7 @@ public class ConfigLoaderTests
             outputStyle: typedclient
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -144,7 +145,7 @@ public class ConfigLoaderTests
             outputStyle: Refit
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.Null(config);
         var diag = Assert.Single(diagnostics);
@@ -161,7 +162,7 @@ public class ConfigLoaderTests
             clientName: MyPetApi
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
@@ -176,10 +177,55 @@ public class ConfigLoaderTests
             clientName: "  "
             """;
 
-        var (config, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
         Assert.Null(config.ClientName);
+    }
+
+    [Fact]
+    public void Delivery_CleanOutputTrue()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            delivery:
+              cleanOutput: true
+            """;
+
+        var (config, delivery, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.True(delivery.CleanOutput);
+    }
+
+    [Fact]
+    public void Delivery_AbsentSection_Defaults()
+    {
+        var yaml = "spec: ./petstore.yaml";
+
+        var (config, delivery, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.False(delivery.CleanOutput);
+    }
+
+    [Fact]
+    public void Delivery_UnknownProperties_Ignored()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            delivery:
+              cleanOutput: true
+              futureProperty: foo
+            """;
+
+        var (config, delivery, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.True(delivery.CleanOutput);
     }
 }
