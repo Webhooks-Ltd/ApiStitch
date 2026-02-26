@@ -27,18 +27,20 @@ internal sealed partial class PetStoreApiOwnersClient : IPetStoreApiOwnersClient
         _jsonOptions = jsonOptions.Options;
     }
 
-    public async Task GetOwnerAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<PetStore.SharedModels.Owner> GetOwnerAsync(int id, CancellationToken cancellationToken = default)
     {
         using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"owners/{Uri.EscapeDataString(id.ToString())}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"Owners/{Uri.EscapeDataString(id.ToString())}");
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        return (await response.Content.ReadFromJsonAsync<PetStore.SharedModels.Owner>(
+            _jsonOptions, cancellationToken).ConfigureAwait(false))!;
     }
 
     public async Task<IReadOnlyList<PetStore.SharedModels.Owner>> ListOwnersAsync(CancellationToken cancellationToken = default)
     {
         using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"owners");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"Owners");
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         return (await response.Content.ReadFromJsonAsync<IReadOnlyList<PetStore.SharedModels.Owner>>(

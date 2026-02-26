@@ -30,6 +30,9 @@ public class GenerationPipeline
     {
         var allDiagnostics = new List<Diagnostic>();
 
+        if (string.IsNullOrWhiteSpace(config.Spec))
+            return new GenerationResult([], [new Diagnostic(DiagnosticSeverity.Error, "AS100", "No spec path configured. Set 'spec' or 'project' in configuration.")]);
+
         var (document, loadDiagnostics) = OpenApiSpecLoader.Load(config.Spec);
         allDiagnostics.AddRange(loadDiagnostics);
 
