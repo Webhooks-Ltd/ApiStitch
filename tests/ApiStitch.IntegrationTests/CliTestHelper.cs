@@ -6,9 +6,22 @@ internal sealed record CliResult(int ExitCode, string Stdout, string Stderr);
 
 internal static class CliTestHelper
 {
-    private static readonly string CliDll = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-            "src", "ApiStitch.Cli", "bin", "Debug", "net8.0", "ApiStitch.Cli.dll"));
+    private static readonly string CliDll = ResolveCliDll();
+
+    private static string ResolveCliDll()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var cliDir = Path.Combine(repoRoot, "src", "ApiStitch.Cli", "bin");
+
+        foreach (var config in new[] { "Release", "Debug" })
+        {
+            var candidate = Path.Combine(cliDir, config, "net10.0", "ApiStitch.Cli.dll");
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return Path.Combine(cliDir, "Debug", "net10.0", "ApiStitch.Cli.dll");
+    }
 
     public static async Task<CliResult> RunAsync(string arguments, string? workingDirectory = null, int timeoutMs = 30000)
     {
