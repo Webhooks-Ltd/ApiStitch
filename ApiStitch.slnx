@@ -2,9 +2,14 @@
   <Folder Name="/src/">
     <Project Path="src/ApiStitch/ApiStitch.csproj" />
     <Project Path="src/ApiStitch.Cli/ApiStitch.Cli.csproj" />
+    <Project Path="src/ApiStitch.OpenApi/ApiStitch.OpenApi.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ApiStitch.IntegrationTests/ApiStitch.IntegrationTests.csproj" />
     <Project Path="tests/ApiStitch.Tests/ApiStitch.Tests.csproj" />
+    <Project Path="tests/ApiStitch.OpenApi.Tests/ApiStitch.OpenApi.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/SampleApi/SampleApi.csproj" />
   </Folder>
 </Solution>
