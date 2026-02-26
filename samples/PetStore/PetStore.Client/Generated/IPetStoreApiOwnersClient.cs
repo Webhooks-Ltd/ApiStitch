@@ -10,7 +10,7 @@ namespace PetStore.Client.Generated;
 [GeneratedCode("ApiStitch", null)]
 public partial interface IPetStoreApiOwnersClient
 {
-    Task GetOwnerAsync(int id, CancellationToken cancellationToken = default);
+    Task<PetStore.SharedModels.Owner> GetOwnerAsync(int id, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PetStore.SharedModels.Owner>> ListOwnersAsync(CancellationToken cancellationToken = default);
 

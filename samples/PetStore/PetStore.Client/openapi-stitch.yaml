@@ -1,4 +1,4 @@
-spec: ../PetStore.Api.json
+project: ../PetStore.Api/PetStore.Api.csproj
 namespace: PetStore.Client.Generated
 clientName: PetStoreApi
 typeReuse:

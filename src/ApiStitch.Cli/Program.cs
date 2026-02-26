@@ -6,6 +6,7 @@ using ApiStitch.Generation;
 using ApiStitch.IO;
 
 var specOption = new Option<string?>("--spec") { Description = "Path to OpenAPI spec file" };
+var projectOption = new Option<string?>("--project") { Description = "Path to .csproj that produces an OpenAPI spec at build time" };
 var outputOption = new Option<string?>("--output") { Description = "Output directory for generated files" };
 var namespaceOption = new Option<string?>("--namespace") { Description = "C# namespace for generated types" };
 var clientNameOption = new Option<string?>("--client-name") { Description = "Client name override" };
@@ -16,6 +17,7 @@ var cleanOutputOption = new Option<bool>("--clean-output") { Description = "Dele
 var generateCommand = new Command("generate", "Generate C# client code from an OpenAPI spec")
 {
     specOption,
+    projectOption,
     outputOption,
     namespaceOption,
     clientNameOption,
@@ -38,6 +40,7 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
     try
     {
         var specArg = parseResult.GetValue(specOption);
+        var projectArg = parseResult.GetValue(projectOption);
         var outputArg = parseResult.GetValue(outputOption);
         var namespaceArg = parseResult.GetValue(namespaceOption);
         var clientNameArg = parseResult.GetValue(clientNameOption);
@@ -75,7 +78,11 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
             }
 
             var yamlDir = Path.GetDirectoryName(Path.GetFullPath(yamlPath))!;
-            var resolvedSpec = specArg ?? Path.GetFullPath(Path.Combine(yamlDir, loadedConfig.Spec));
+            var resolvedSpec = specArg != null
+                ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg))
+                : loadedConfig.Spec != null
+                    ? Path.GetFullPath(Path.Combine(yamlDir, loadedConfig.Spec))
+                    : null;
             var resolvedOutput = outputArg != null
                 ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, outputArg))
                 : Path.GetFullPath(Path.Combine(yamlDir, loadedConfig.OutputDir));
@@ -94,7 +101,8 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
             config = new ApiStitchConfig
             {
-                Spec = specArg != null ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg)) : resolvedSpec,
+                Spec = resolvedSpec,
+                Project = loadedConfig.Project,
                 Namespace = namespaceArg ?? loadedConfig.Namespace,
                 OutputDir = resolvedOutput,
                 OutputStyle = outputStyle,
@@ -104,9 +112,9 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
         }
         else
         {
-            if (specArg == null)
+            if (specArg == null && projectArg == null)
             {
-                Console.Error.WriteLine("No openapi-stitch.yaml found in the current directory. Either create one or pass --spec <path>.");
+                Console.Error.WriteLine("No openapi-stitch.yaml found in the current directory. Either create one or pass --spec or --project.");
                 return 2;
             }
 
@@ -124,7 +132,8 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
             config = new ApiStitchConfig
             {
-                Spec = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg)),
+                Spec = specArg != null ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg)) : null,
+                Project = projectArg,
                 Namespace = namespaceArg ?? "ApiStitch.Generated",
                 OutputDir = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, displayOutputDir)),
                 OutputStyle = outputStyle,
@@ -134,6 +143,40 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
         if (cleanOutputArg)
             delivery = new FileWriteOptions { CleanOutput = true };
+
+        var resolvedProjectPath = projectArg != null
+            ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, projectArg))
+            : config.Project != null
+                ? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(yamlPath ?? "."))!, config.Project))
+                : null;
+
+        if (config.Spec == null && resolvedProjectPath != null)
+        {
+            Console.Error.WriteLine($"Extracting OpenAPI spec from {Path.GetFileName(resolvedProjectPath)}...");
+            var (extractedSpec, extractError) = await ApiStitch.Parsing.ProjectSpecExtractor.ExtractAsync(
+                resolvedProjectPath, linked.Token);
+
+            if (extractedSpec == null)
+            {
+                Console.Error.WriteLine($"error: {extractError}");
+                return 1;
+            }
+
+            config = new ApiStitchConfig
+            {
+                Spec = extractedSpec,
+                Namespace = config.Namespace,
+                OutputDir = config.OutputDir,
+                OutputStyle = config.OutputStyle,
+                ClientName = config.ClientName,
+                TypeReuse = config.TypeReuse,
+            };
+        }
+        else if (config.Spec == null)
+        {
+            Console.Error.WriteLine("No spec or project specified. Use --spec, --project, or configure in openapi-stitch.yaml.");
+            return 2;
+        }
 
         var pipeline = new GenerationPipeline();
         var result = pipeline.Generate(config);

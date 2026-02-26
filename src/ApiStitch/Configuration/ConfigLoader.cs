@@ -53,9 +53,17 @@ public static class ConfigLoader
             return (null, new FileWriteOptions(), [new Diagnostic(DiagnosticSeverity.Error, "AS301", $"Invalid YAML: {ex.Message}")]);
         }
 
-        if (string.IsNullOrWhiteSpace(dto.Spec))
+        var hasSpec = !string.IsNullOrWhiteSpace(dto.Spec);
+        var hasProject = !string.IsNullOrWhiteSpace(dto.Project);
+
+        if (!hasSpec && !hasProject)
         {
-            return (null, new FileWriteOptions(), [new Diagnostic(DiagnosticSeverity.Error, "AS302", "Configuration property 'spec' is required and must not be empty")]);
+            return (null, new FileWriteOptions(), [new Diagnostic(DiagnosticSeverity.Error, "AS302", "Either 'spec' or 'project' is required in configuration")]);
+        }
+
+        if (hasSpec && hasProject)
+        {
+            return (null, new FileWriteOptions(), [new Diagnostic(DiagnosticSeverity.Error, "AS302", "Only one of 'spec' or 'project' may be specified, not both")]);
         }
 
         OutputStyle outputStyle = OutputStyle.TypedClient;
@@ -88,7 +96,8 @@ public static class ConfigLoader
 
         var config = new ApiStitchConfig
         {
-            Spec = dto.Spec!,
+            Spec = dto.Spec,
+            Project = dto.Project,
             Namespace = string.IsNullOrWhiteSpace(dto.Namespace) ? "ApiStitch.Generated" : dto.Namespace!,
             OutputDir = string.IsNullOrWhiteSpace(dto.OutputDir) ? "./Generated" : dto.OutputDir!,
             OutputStyle = outputStyle,
@@ -107,6 +116,7 @@ public static class ConfigLoader
     private class ConfigDto
     {
         public string? Spec { get; set; }
+        public string? Project { get; set; }
         public string? Namespace { get; set; }
         public string? OutputDir { get; set; }
         public string? OutputStyle { get; set; }

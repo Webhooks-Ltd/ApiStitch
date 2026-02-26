@@ -9,6 +9,7 @@ if (!ApiStitchDetection.IsOpenApiGenerationOnly)
     // Heavy dependencies (database, auth, etc.) can be skipped during build-time spec generation.
 }
 
+builder.Services.AddControllers();
 builder.Services.AddOpenApi(options => options.AddApiStitchTypeInfo());
 
 var app = builder.Build();
@@ -16,7 +17,9 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-// ── Pets ──
+app.MapControllers();
+
+// ── Pets (Minimal API) ──
 
 var pets = new List<Pet>
 {
@@ -49,24 +52,5 @@ app.MapPost("/pets", (CreatePetRequest request) =>
 })
     .WithName("CreatePet")
     .WithTags("Pets");
-
-// ── Owners ──
-
-var owners = new List<Owner>
-{
-    new() { Id = 1, Name = "Alice", Email = "alice@example.com" },
-    new() { Id = 2, Name = "Bob" },
-};
-
-app.MapGet("/owners", () => owners)
-    .WithName("ListOwners")
-    .WithTags("Owners");
-
-app.MapGet("/owners/{id:int}", (int id) =>
-    owners.FirstOrDefault(o => o.Id == id) is { } owner
-        ? Results.Ok(owner)
-        : Results.NotFound())
-    .WithName("GetOwner")
-    .WithTags("Owners");
 
 app.Run();
