@@ -8,21 +8,21 @@ A .NET OpenAPI client generator with first-class type reuse. Generates typed Htt
 
 ## Features
 
-- **First-class type reuse** -- whitelist namespaces and types from your shared libraries; ApiStitch reuses them in the generated client instead of emitting duplicates
-- **Namespace remapping** -- remap producer namespaces to consumer namespaces when the two differ
-- **Project-based spec extraction** -- point at a `.csproj` and ApiStitch builds it and extracts the OpenAPI spec automatically
-- **Multi-tag clients** -- separate client interface per API tag, backed by a single named `HttpClient`
-- **Clean C# 12 output** -- records, `required`, `init`, nullable reference types, partial classes
-- **AOT/trimming compatible** -- System.Text.Json source generation, no reflection
-- **Production HTTP patterns** -- `IHttpClientFactory`, `CancellationToken` on every method, DI registration via `IServiceCollection` extension
+- **First-class type reuse** — whitelist namespaces and types from your shared libraries; ApiStitch reuses them in the generated client instead of emitting duplicates
+- **Namespace remapping** — remap producer namespaces to consumer namespaces when the two differ
+- **Project-based spec extraction** — point at a `.csproj` and ApiStitch builds it and extracts the OpenAPI spec automatically
+- **Multi-tag clients** — separate client interface per API tag, backed by a single named `HttpClient`
+- **Clean C# 12 output** — records, `required`, `init`, nullable reference types, partial classes
+- **AOT/trimming compatible** — System.Text.Json source generation, no reflection
+- **Production HTTP patterns** — `IHttpClientFactory`, `CancellationToken` on every method, DI registration via `IServiceCollection` extension
 
 ## How It Works
 
 ApiStitch has two halves:
 
-**Producer side** (`ApiStitch.OpenApi`) -- an ASP.NET Core schema transformer that enriches your OpenAPI spec with `x-apistitch-type` vendor extensions containing CLR type names.
+**Producer side** (`ApiStitch.OpenApi`) — an ASP.NET Core schema transformer that enriches your OpenAPI spec with `x-apistitch-type` vendor extensions containing CLR type names.
 
-**Consumer side** (`ApiStitch.Cli`) -- a CLI tool that reads the enriched spec, resolves which types to reuse vs. generate, and emits typed HttpClient wrappers.
+**Consumer side** (`ApiStitch.Cli`) — a CLI tool that reads the enriched spec, resolves which types to reuse vs. generate, and emits typed HttpClient wrappers.
 
 ## Quick Start
 
@@ -82,12 +82,12 @@ All options in `openapi-stitch.yaml`:
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `spec` | Path to OpenAPI spec file (mutually exclusive with `project`) | -- |
-| `project` | Path to `.csproj` that produces an OpenAPI spec at build time | -- |
+| `spec` | Path to OpenAPI spec file (mutually exclusive with `project`) | |
+| `project` | Path to `.csproj` that produces an OpenAPI spec at build time | |
 | `namespace` | C# namespace for generated types | `ApiStitch.Generated` |
 | `outputDir` | Output directory for generated files | `./Generated` |
 | `outputStyle` | Output style (`TypedClient`) | `TypedClient` |
-| `clientName` | Client name override (derived from spec title if omitted) | -- |
+| `clientName` | Client name override (derived from spec title if omitted) | |
 | `typeReuse.includeNamespaces` | Glob patterns for namespaces to reuse (e.g., `MyShared.Models.*`) | `[]` |
 | `typeReuse.includeTypes` | Exact fully-qualified type names to reuse | `[]` |
 | `typeReuse.excludeNamespaces` | Glob patterns for namespaces to exclude (overrides includes) | `[]` |
@@ -100,9 +100,9 @@ CLI flags (`--spec`, `--output`, `--namespace`, `--client-name`, `--output-style
 
 The [`samples/PetStore/`](samples/PetStore/) directory contains an end-to-end example with three projects:
 
-- **PetStore.SharedModels** -- shared model types (`Pet`, `Owner`, `PetStatus`) referenced by both API and client
-- **PetStore.Api** -- ASP.NET Core API using both Minimal APIs (Pets) and MVC controllers (Owners), with `AddApiStitchTypeInfo()` registered
-- **PetStore.Client** -- generated typed client that reuses `PetStore.SharedModels` types and generates only API-local types (`CreatePetRequest`)
+- **PetStore.SharedModels** — shared model types (`Pet`, `Owner`, `PetStatus`) referenced by both API and client
+- **PetStore.Api** — ASP.NET Core API using both Minimal APIs (Pets) and MVC controllers (Owners), with `AddApiStitchTypeInfo()` registered
+- **PetStore.Client** — generated typed client that reuses `PetStore.SharedModels` types and generates only API-local types (`CreatePetRequest`)
 
 The sample demonstrates partial type reuse: shared models pass through unchanged while request types that only exist in the API are generated fresh.
 
