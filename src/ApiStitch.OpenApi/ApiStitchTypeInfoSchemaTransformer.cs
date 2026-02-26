@@ -1,10 +1,5 @@
 using Microsoft.AspNetCore.OpenApi;
-#if NET10_0_OR_GREATER
 using Microsoft.OpenApi;
-#else
-using Microsoft.OpenApi.Any;
-using Microsoft.OpenApi.Models;
-#endif
 
 namespace ApiStitch.OpenApi;
 
@@ -51,12 +46,8 @@ internal sealed class ApiStitchTypeInfoSchemaTransformer : IOpenApiSchemaTransfo
         if (typeName is null)
             return Task.CompletedTask;
 
-#if NET10_0_OR_GREATER
         schema.Extensions ??= new Dictionary<string, IOpenApiExtension>();
         schema.Extensions["x-apistitch-type"] = new JsonNodeExtension(typeName);
-#else
-        schema.Extensions["x-apistitch-type"] = new OpenApiString(typeName);
-#endif
 
         return Task.CompletedTask;
     }

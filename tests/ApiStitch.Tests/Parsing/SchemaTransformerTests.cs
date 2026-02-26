@@ -1,18 +1,19 @@
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
 using ApiStitch.Parsing;
-using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Readers;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Reader;
 
 namespace ApiStitch.Tests.Parsing;
 
 public class SchemaTransformerTests
 {
+    private static readonly OpenApiReaderSettings YamlSettings = CreateYamlSettings();
+    private static OpenApiReaderSettings CreateYamlSettings() { var s = new OpenApiReaderSettings(); s.AddYamlReader(); return s; }
+
     private static OpenApiDocument ParseYaml(string yaml)
     {
-        var reader = new OpenApiStringReader();
-        var doc = reader.Read(yaml, out var diagnostic);
-        return doc;
+        return OpenApiDocument.Parse(yaml, settings: YamlSettings).Document!;
     }
 
     [Fact]
@@ -814,5 +815,128 @@ public class SchemaTransformerTests
             .ToList();
         var relaxedCount = allProps.Count(x => !x.IsRequired);
         Assert.Equal(1, relaxedCount);
+    }
+
+    [Fact]
+    public void VendorTypeHint_ReadFromExtension()
+    {
+        var doc = ParseYaml("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  x-apistitch-type: SampleApi.Models.Pet
+                  properties:
+                    id:
+                      type: integer
+            """);
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, _) = transformer.Transform(doc);
+
+        var pet = Assert.Single(spec.Schemas);
+        Assert.Equal("SampleApi.Models.Pet", pet.VendorTypeHint);
+    }
+
+    [Fact]
+    public void VendorTypeHint_NullWhenNoExtension()
+    {
+        var doc = ParseYaml("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+            """);
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, _) = transformer.Transform(doc);
+
+        var pet = Assert.Single(spec.Schemas);
+        Assert.Null(pet.VendorTypeHint);
+    }
+
+    [Fact]
+    public void VendorTypeHint_NullWhenEmptyString()
+    {
+        var doc = ParseYaml("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  x-apistitch-type: ""
+                  properties:
+                    id:
+                      type: integer
+            """);
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, _) = transformer.Transform(doc);
+
+        var pet = Assert.Single(spec.Schemas);
+        Assert.Null(pet.VendorTypeHint);
+    }
+
+    [Fact]
+    public void VendorTypeHint_OnEnumSchema()
+    {
+        var doc = ParseYaml("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths: {}
+            components:
+              schemas:
+                PetStatus:
+                  type: string
+                  x-apistitch-type: SampleApi.Models.PetStatus
+                  enum: [available, pending, adopted]
+            """);
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, _) = transformer.Transform(doc);
+
+        var status = Assert.Single(spec.Schemas);
+        Assert.Equal("SampleApi.Models.PetStatus", status.VendorTypeHint);
+    }
+
+    [Fact]
+    public void VendorTypeHint_InlinePropertySchema_NotRead()
+    {
+        var doc = ParseYaml("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths: {}
+            components:
+              schemas:
+                Owner:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    address:
+                      type: object
+                      x-apistitch-type: ShouldBeIgnored
+                      properties:
+                        street:
+                          type: string
+            """);
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, _) = transformer.Transform(doc);
+
+        var inlineSchema = spec.Schemas.FirstOrDefault(s => s.Name == "OwnerAddress");
+        Assert.NotNull(inlineSchema);
+        Assert.Null(inlineSchema.VendorTypeHint);
     }
 }

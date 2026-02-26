@@ -1,4 +1,5 @@
 using ApiStitch.Diagnostics;
+using ApiStitch.Model;
 using ApiStitch.Parsing;
 
 namespace ApiStitch.Tests.Parsing;
@@ -42,12 +43,31 @@ public class OpenApiSpecLoaderTests
     }
 
     [Fact]
-    public void SwaggerV2_ReturnsError()
+    public void SwaggerV2_ParsedSuccessfully()
     {
         var (doc, diagnostics) = OpenApiSpecLoader.Load(SpecPath("swagger-v2.yaml"));
 
-        Assert.Null(doc);
-        Assert.Contains(diagnostics, d => d.Code == "AS101" && d.Severity == DiagnosticSeverity.Error);
+        Assert.NotNull(doc);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void SwaggerV2_WithSchemas_UpconvertedAndTransformable()
+    {
+        var (doc, diagnostics) = OpenApiSpecLoader.Load(SpecPath("swagger-v2-with-schemas.yaml"));
+
+        Assert.NotNull(doc);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.NotNull(doc.Components?.Schemas);
+        Assert.Contains(doc.Components.Schemas, s => s.Key == "Pet");
+
+        var transformer = new SchemaTransformer();
+        var (spec, _, transformDiags) = transformer.Transform(doc);
+        Assert.DoesNotContain(transformDiags, d => d.Severity == DiagnosticSeverity.Error);
+
+        var pet = Assert.Single(spec.Schemas);
+        Assert.Equal("Pet", pet.Name);
+        Assert.Equal(2, pet.Properties.Count);
     }
 
     [Fact]
@@ -60,12 +80,12 @@ public class OpenApiSpecLoaderTests
     }
 
     [Fact]
-    public void OpenApi31_ReturnsError()
+    public void OpenApi31_ParsedSuccessfully()
     {
         var (doc, diagnostics) = OpenApiSpecLoader.Load(SpecPath("minimal-valid-3.1.yaml"));
 
-        Assert.Null(doc);
-        Assert.Contains(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.NotNull(doc);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]

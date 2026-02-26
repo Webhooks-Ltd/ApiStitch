@@ -1,15 +1,18 @@
 using ApiStitch.Model;
 using ApiStitch.Parsing;
-using Microsoft.OpenApi.Readers;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Reader;
 
 namespace ApiStitch.Tests.Parsing;
 
 public class InheritanceDetectorTests
 {
-    private static Microsoft.OpenApi.Models.OpenApiDocument ParseYaml(string yaml)
+    private static readonly OpenApiReaderSettings YamlSettings = CreateYamlSettings();
+    private static OpenApiReaderSettings CreateYamlSettings() { var s = new OpenApiReaderSettings(); s.AddYamlReader(); return s; }
+
+    private static OpenApiDocument ParseYaml(string yaml)
     {
-        var reader = new OpenApiStringReader();
-        return reader.Read(yaml, out _);
+        return OpenApiDocument.Parse(yaml, settings: YamlSettings).Document!;
     }
 
     [Fact]

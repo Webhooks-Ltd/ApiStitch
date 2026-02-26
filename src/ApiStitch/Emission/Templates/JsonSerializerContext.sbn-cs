@@ -1,5 +1,4 @@
 #nullable enable
-using System.CodeDom.Compiler;
 {{- if has_collections }}
 using System.Collections.Generic;
 {{- end }}
@@ -13,6 +12,5 @@ namespace {{ namespace }};
 {{~ for collection_type in collection_types ~}}
 [JsonSerializable(typeof({{ collection_type }}))]
 {{~ end ~}}
-[GeneratedCode("ApiStitch", null)]
 [JsonSourceGenerationOptions]
 public partial class {{ context_name }} : JsonSerializerContext;

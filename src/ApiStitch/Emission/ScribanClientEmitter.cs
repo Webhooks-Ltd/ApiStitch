@@ -180,12 +180,14 @@ public class ScribanClientEmitter : IClientEmitter
                 typeName += "?";
         }
 
-        if (param.Location == ParameterLocation.Query && param.Schema.Kind == SchemaKind.Enum)
+        if (param.Location == ParameterLocation.Query && param.Schema.Kind == SchemaKind.Enum
+            && !param.Schema.IsExternal)
             queryEnums.Add(param.Schema.Name);
 
         if (param.Location == ParameterLocation.Query && param.Schema.Kind == SchemaKind.Array
-            && param.Schema.ArrayItemSchema?.Kind == SchemaKind.Enum)
-            queryEnums.Add(param.Schema.ArrayItemSchema.Name);
+            && param.Schema.ArrayItemSchema?.Kind == SchemaKind.Enum
+            && !(param.Schema.ArrayItemSchema?.IsExternal ?? false))
+            queryEnums.Add(param.Schema.ArrayItemSchema!.Name);
 
         return new
         {
@@ -202,16 +204,27 @@ public class ScribanClientEmitter : IClientEmitter
         var isEnum = param.Schema.Kind == SchemaKind.Enum;
         var isArrayOfEnum = isArray && param.Schema.ArrayItemSchema?.Kind == SchemaKind.Enum;
 
+        var isExternalEnum = isEnum && param.Schema.IsExternal;
+        var isExternalArrayOfEnum = isArrayOfEnum && (param.Schema.ArrayItemSchema?.IsExternal ?? false);
+
         string toStringExpr;
-        if (isEnum)
+        if (isEnum && !isExternalEnum)
         {
             queryEnums.Add(param.Schema.Name);
             toStringExpr = $"{param.CSharpName}{(param.IsRequired ? "" : ".Value")}.ToQueryString()";
         }
-        else if (isArrayOfEnum)
+        else if (isEnum && isExternalEnum)
+        {
+            toStringExpr = $"{param.CSharpName}{(param.IsRequired ? "" : ".Value")}.ToString()";
+        }
+        else if (isArrayOfEnum && !isExternalArrayOfEnum)
         {
             queryEnums.Add(param.Schema.ArrayItemSchema!.Name);
             toStringExpr = "item.ToQueryString()";
+        }
+        else if (isArrayOfEnum && isExternalArrayOfEnum)
+        {
+            toStringExpr = "item.ToString()";
         }
         else if (isArray)
         {

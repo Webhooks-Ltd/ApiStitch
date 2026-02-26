@@ -10,6 +10,8 @@
     <Project Path="tests/ApiStitch.OpenApi.Tests/ApiStitch.OpenApi.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/SampleApi/SampleApi.csproj" />
+    <Project Path="samples/PetStore/PetStore.SharedModels/PetStore.SharedModels.csproj" />
+    <Project Path="samples/PetStore/PetStore.Api/PetStore.Api.csproj" />
+    <Project Path="samples/PetStore/PetStore.Client/PetStore.Client.csproj" />
   </Folder>
 </Solution>

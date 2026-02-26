@@ -17,6 +17,9 @@ public class ApiSchema
     public bool IsDeprecated { get; init; }
     public bool HasAdditionalProperties { get; init; }
     public ApiSchema? AdditionalPropertiesSchema { get; init; }
+    public string? VendorTypeHint { get; set; }
+    public string? ExternalClrTypeName { get; set; }
+    public bool IsExternal => ExternalClrTypeName is not null;
     public string? CSharpTypeName { get; set; }
     public string? Source { get; init; }
     public List<Diagnostic> Diagnostics { get; } = [];

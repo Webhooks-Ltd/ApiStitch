@@ -2,19 +2,20 @@ using ApiStitch.Configuration;
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
 using ApiStitch.Parsing;
-using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Readers;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Reader;
 using ParameterLocation = ApiStitch.Model.ParameterLocation;
 
 namespace ApiStitch.Tests.Parsing;
 
 public class OperationTransformerTests
 {
+    private static readonly OpenApiReaderSettings YamlSettings = CreateYamlSettings();
+    private static OpenApiReaderSettings CreateYamlSettings() { var s = new OpenApiReaderSettings(); s.AddYamlReader(); return s; }
+
     private static OpenApiDocument ParseYaml(string yaml)
     {
-        var reader = new OpenApiStringReader();
-        var doc = reader.Read(yaml, out var diagnostic);
-        return doc;
+        return OpenApiDocument.Parse(yaml, settings: YamlSettings).Document!;
     }
 
     private static (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformOperations(

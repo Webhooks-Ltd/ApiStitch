@@ -1,24 +1,29 @@
+using System.Text.Json.Nodes;
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 
 namespace ApiStitch.Parsing;
 
 public class SchemaTransformer
 {
     private readonly List<Diagnostic> _diagnostics = [];
-    private readonly Dictionary<OpenApiSchema, ApiSchema> _schemaMap = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<IOpenApiSchema, ApiSchema> _schemaMap = new(ReferenceEqualityComparer.Instance);
     private readonly List<ApiSchema> _allSchemas = [];
     private readonly HashSet<string> _usedNames = new(StringComparer.Ordinal);
-    private readonly Dictionary<OpenApiSchema, string> _componentSchemaNames = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<IOpenApiSchema, string> _componentSchemaNames = new(ReferenceEqualityComparer.Instance);
+
+    private static IOpenApiSchema ResolveRef(IOpenApiSchema schema) => OpenApiSchemaHelpers.ResolveRef(schema);
+    private static JsonSchemaType? GetBaseType(IOpenApiSchema schema) => OpenApiSchemaHelpers.GetBaseType(schema);
+    private static bool IsNullable(IOpenApiSchema schema) => OpenApiSchemaHelpers.IsNullable(schema);
 
     /// <summary>
     /// Transforms OpenAPI component schemas into the ApiStitch semantic model.
     /// </summary>
     /// <returns>The specification, a schema map for operation resolution, and diagnostics.</returns>
-    public (ApiSpecification Specification, IReadOnlyDictionary<OpenApiSchema, ApiSchema> SchemaMap, IReadOnlyList<Diagnostic> Diagnostics) Transform(OpenApiDocument document)
+    public (ApiSpecification Specification, IReadOnlyDictionary<IOpenApiSchema, ApiSchema> SchemaMap, IReadOnlyList<Diagnostic> Diagnostics) Transform(OpenApiDocument document)
     {
-        var componentSchemas = document.Components?.Schemas ?? new Dictionary<string, OpenApiSchema>();
+        var componentSchemas = document.Components?.Schemas ?? new Dictionary<string, IOpenApiSchema>();
 
         var sortedSchemas = componentSchemas
             .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
@@ -51,7 +56,7 @@ public class SchemaTransformer
         return (spec, _schemaMap, _diagnostics);
     }
 
-    private ApiSchema TransformSchema(OpenApiSchema openApiSchema, string originalName, string source)
+    private ApiSchema TransformSchema(IOpenApiSchema openApiSchema, string originalName, string source)
     {
         if (_schemaMap.TryGetValue(openApiSchema, out var existing))
             return existing;
@@ -72,7 +77,7 @@ public class SchemaTransformer
         {
             schema = TransformAllOf(openApiSchema, resolvedName, originalName, source);
         }
-        else if (openApiSchema.Type == "array")
+        else if (GetBaseType(openApiSchema) == JsonSchemaType.Array)
         {
             schema = TransformArray(openApiSchema, resolvedName, originalName, source);
         }
@@ -80,7 +85,7 @@ public class SchemaTransformer
         {
             schema = TransformEnum(openApiSchema, resolvedName, originalName, source);
         }
-        else if (openApiSchema.Type == "object" || openApiSchema.Properties is { Count: > 0 })
+        else if (GetBaseType(openApiSchema) == JsonSchemaType.Object || openApiSchema.Properties is { Count: > 0 })
         {
             schema = TransformObject(openApiSchema, resolvedName, originalName, source);
         }
@@ -89,12 +94,21 @@ public class SchemaTransformer
             schema = TransformPrimitive(openApiSchema, resolvedName, originalName, source);
         }
 
+        if (openApiSchema.Extensions?.TryGetValue("x-apistitch-type", out var ext) == true
+            && ext is JsonNodeExtension jsonExt
+            && jsonExt.Node is JsonValue jsonValue
+            && jsonValue.TryGetValue(out string? strValue)
+            && !string.IsNullOrWhiteSpace(strValue))
+        {
+            schema.VendorTypeHint = strValue;
+        }
+
         _schemaMap[openApiSchema] = schema;
         _allSchemas.Add(schema);
         return schema;
     }
 
-    private ApiSchema TransformObject(OpenApiSchema openApiSchema, string name, string originalName, string source)
+    private ApiSchema TransformObject(IOpenApiSchema openApiSchema, string name, string originalName, string source)
     {
         var schema = new ApiSchema
         {
@@ -102,7 +116,7 @@ public class SchemaTransformer
             OriginalName = originalName,
             Kind = SchemaKind.Object,
             Description = openApiSchema.Description,
-            IsNullable = openApiSchema.Nullable,
+            IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
             HasAdditionalProperties = openApiSchema.AdditionalProperties != null,
             AdditionalPropertiesSchema = openApiSchema.AdditionalProperties?.Type != null
@@ -113,10 +127,10 @@ public class SchemaTransformer
 
         _schemaMap[openApiSchema] = schema;
 
-        var required = new HashSet<string>(openApiSchema.Required ?? (ISet<string>)new HashSet<string>(), StringComparer.Ordinal);
+        var required = new HashSet<string>(openApiSchema.Required ?? new HashSet<string>(), StringComparer.Ordinal);
         var properties = new List<ApiProperty>();
 
-        foreach (var (propName, propSchema) in openApiSchema.Properties ?? Enumerable.Empty<KeyValuePair<string, OpenApiSchema>>())
+        foreach (var (propName, propSchema) in openApiSchema.Properties ?? new Dictionary<string, IOpenApiSchema>())
         {
             var propApiSchema = GetOrTransformPropertySchema(propSchema, name, propName, $"{source}/properties/{propName}");
             properties.Add(new ApiProperty
@@ -136,20 +150,20 @@ public class SchemaTransformer
         return schema;
     }
 
-    private ApiSchema TransformEnum(OpenApiSchema openApiSchema, string name, string originalName, string source)
+    private ApiSchema TransformEnum(IOpenApiSchema openApiSchema, string name, string originalName, string source)
     {
-        if (openApiSchema.Type != "string")
+        if (GetBaseType(openApiSchema) != JsonSchemaType.String)
         {
             _diagnostics.Add(new Diagnostic(DiagnosticSeverity.Warning, "AS200",
-                $"Schema '{originalName}' is a {openApiSchema.Type} enum. Only string enums are supported; treating as primitive type.",
+                $"Schema '{originalName}' is a {GetBaseType(openApiSchema)} enum. Only string enums are supported; treating as primitive type.",
                 source));
             return TransformPrimitive(openApiSchema, name, originalName, source);
         }
 
-        var members = openApiSchema.Enum
+        var members = openApiSchema.Enum!
             .Select(e =>
             {
-                var value = (e as Microsoft.OpenApi.Any.OpenApiString)?.Value ?? e.ToString() ?? "";
+                var value = (e as JsonValue)?.ToString() ?? e?.ToString() ?? "";
                 return new ApiEnumMember
                 {
                     Name = value,
@@ -166,13 +180,13 @@ public class SchemaTransformer
             Kind = SchemaKind.Enum,
             Description = openApiSchema.Description,
             EnumValues = members,
-            IsNullable = openApiSchema.Nullable,
+            IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
             Source = source,
         };
     }
 
-    private ApiSchema TransformArray(OpenApiSchema openApiSchema, string name, string originalName, string source)
+    private ApiSchema TransformArray(IOpenApiSchema openApiSchema, string name, string originalName, string source)
     {
         ApiSchema? itemSchema = null;
         if (openApiSchema.Items != null)
@@ -187,13 +201,13 @@ public class SchemaTransformer
             Kind = SchemaKind.Array,
             Description = openApiSchema.Description,
             ArrayItemSchema = itemSchema,
-            IsNullable = openApiSchema.Nullable,
+            IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
             Source = source,
         };
     }
 
-    private ApiSchema TransformPrimitive(OpenApiSchema openApiSchema, string name, string originalName, string source)
+    private ApiSchema TransformPrimitive(IOpenApiSchema openApiSchema, string name, string originalName, string source)
     {
         var primitiveType = MapPrimitiveType(openApiSchema.Type, openApiSchema.Format, originalName, source);
 
@@ -204,13 +218,13 @@ public class SchemaTransformer
             Kind = SchemaKind.Primitive,
             Description = openApiSchema.Description,
             PrimitiveType = primitiveType,
-            IsNullable = openApiSchema.Nullable,
+            IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
             Source = source,
         };
     }
 
-    private ApiSchema TransformAllOf(OpenApiSchema openApiSchema, string name, string originalName, string source)
+    private ApiSchema TransformAllOf(IOpenApiSchema openApiSchema, string name, string originalName, string source)
     {
         var schema = new ApiSchema
         {
@@ -218,7 +232,7 @@ public class SchemaTransformer
             OriginalName = originalName,
             Kind = SchemaKind.Object,
             Description = openApiSchema.Description,
-            IsNullable = openApiSchema.Nullable,
+            IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
             Source = source,
         };
@@ -226,15 +240,16 @@ public class SchemaTransformer
         _schemaMap[openApiSchema] = schema;
 
         var mergedProperties = new Dictionary<string, ApiProperty>(StringComparer.Ordinal);
-        var mergedRequired = new HashSet<string>(openApiSchema.Required ?? (ISet<string>)new HashSet<string>(), StringComparer.Ordinal);
+        var mergedRequired = new HashSet<string>(openApiSchema.Required ?? new HashSet<string>(), StringComparer.Ordinal);
         var refTargets = new List<ApiSchema>();
         var hasInlineProperties = false;
 
-        foreach (var allOfEntry in openApiSchema.AllOf)
+        foreach (var allOfEntry in openApiSchema.AllOf!)
         {
-            if (allOfEntry.Reference != null)
+            var resolvedEntry = ResolveRef(allOfEntry);
+            if (_componentSchemaNames.TryGetValue(resolvedEntry, out var refId))
             {
-                var refSchema = GetOrTransformPropertySchema(allOfEntry, name, allOfEntry.Reference.Id, source);
+                var refSchema = GetOrTransformPropertySchema(allOfEntry, name, refId, source);
                 refTargets.Add(refSchema);
                 foreach (var prop in refSchema.Properties)
                 {
@@ -247,18 +262,18 @@ public class SchemaTransformer
                     mergedProperties[prop.Name] = prop;
                 }
 
-                foreach (var req in allOfEntry.Required ?? (ISet<string>)new HashSet<string>())
+                foreach (var req in allOfEntry.Required ?? new HashSet<string>())
                     mergedRequired.Add(req);
             }
             else
             {
-                foreach (var req in allOfEntry.Required ?? (ISet<string>)new HashSet<string>())
+                foreach (var req in allOfEntry.Required ?? new HashSet<string>())
                     mergedRequired.Add(req);
 
                 if (allOfEntry.Properties is { Count: > 0 })
                     hasInlineProperties = true;
 
-                foreach (var (propName, propSchema) in allOfEntry.Properties ?? Enumerable.Empty<KeyValuePair<string, OpenApiSchema>>())
+                foreach (var (propName, propSchema) in allOfEntry.Properties ?? new Dictionary<string, IOpenApiSchema>())
                 {
                     var propApiSchema = GetOrTransformPropertySchema(propSchema, name, propName, $"{source}/allOf/properties/{propName}");
                     if (mergedProperties.ContainsKey(propName))
@@ -298,15 +313,17 @@ public class SchemaTransformer
         return schema;
     }
 
-    private ApiSchema GetOrTransformPropertySchema(OpenApiSchema propSchema, string parentName, string propertyName, string source)
+    private ApiSchema GetOrTransformPropertySchema(IOpenApiSchema propSchema, string parentName, string propertyName, string source)
     {
-        if (_schemaMap.TryGetValue(propSchema, out var existing))
+        var resolved = ResolveRef(propSchema);
+
+        if (_schemaMap.TryGetValue(resolved, out var existing))
             return existing;
 
-        if (_componentSchemaNames.TryGetValue(propSchema, out var componentName))
-            return TransformSchema(propSchema, componentName, $"#/components/schemas/{componentName}");
+        if (_componentSchemaNames.TryGetValue(resolved, out var componentName))
+            return TransformSchema(resolved, componentName, $"#/components/schemas/{componentName}");
 
-        if (propSchema.Type == "object" && propSchema.Properties is { Count: > 0 } && propSchema.Reference == null)
+        if (GetBaseType(resolved) == JsonSchemaType.Object && resolved.Properties is { Count: > 0 } && !_componentSchemaNames.ContainsKey(resolved))
         {
             var hoistedName = $"{parentName}{NamingHelper.ToPascalCase(propertyName)}";
             var resolvedName = NamingHelper.ResolveCollision(hoistedName, _usedNames);
@@ -318,27 +335,27 @@ public class SchemaTransformer
                     source));
             }
 
-            var schema = TransformObject(propSchema, resolvedName, propertyName, source);
-            _schemaMap[propSchema] = schema;
+            var schema = TransformObject(resolved, resolvedName, propertyName, source);
+            _schemaMap[resolved] = schema;
             _allSchemas.Add(schema);
             return schema;
         }
 
-        if (propSchema.AllOf is { Count: > 0 } && propSchema.Reference == null)
+        if (resolved.AllOf is { Count: > 0 } && !_componentSchemaNames.ContainsKey(resolved))
         {
             var hoistedName = $"{parentName}{NamingHelper.ToPascalCase(propertyName)}";
             var resolvedName = NamingHelper.ResolveCollision(hoistedName, _usedNames);
-            var schema = TransformAllOf(propSchema, resolvedName, propertyName, source);
-            _schemaMap[propSchema] = schema;
+            var schema = TransformAllOf(resolved, resolvedName, propertyName, source);
+            _schemaMap[resolved] = schema;
             _allSchemas.Add(schema);
             return schema;
         }
 
-        if (propSchema.Type == "array")
+        if (GetBaseType(resolved) == JsonSchemaType.Array)
         {
             ApiSchema? itemSchema = null;
-            if (propSchema.Items != null)
-                itemSchema = GetOrTransformPropertySchema(propSchema.Items, parentName, $"{propertyName}Item", $"{source}/items");
+            if (resolved.Items != null)
+                itemSchema = GetOrTransformPropertySchema(resolved.Items, parentName, $"{propertyName}Item", $"{source}/items");
 
             var arraySchema = new ApiSchema
             {
@@ -346,60 +363,61 @@ public class SchemaTransformer
                 OriginalName = propertyName,
                 Kind = SchemaKind.Array,
                 ArrayItemSchema = itemSchema,
-                IsNullable = propSchema.Nullable,
-                IsDeprecated = propSchema.Deprecated,
+                IsNullable = IsNullable(resolved),
+                IsDeprecated = resolved.Deprecated,
                 Source = source,
             };
-            _schemaMap[propSchema] = arraySchema;
+            _schemaMap[resolved] = arraySchema;
             return arraySchema;
         }
 
-        if (propSchema.Enum is { Count: > 0 } && propSchema.Reference == null)
+        if (resolved.Enum is { Count: > 0 } && !_componentSchemaNames.ContainsKey(resolved))
         {
             var hoistedName = $"{parentName}{NamingHelper.ToPascalCase(propertyName)}";
             var resolvedName = NamingHelper.ResolveCollision(hoistedName, _usedNames);
-            var schema = TransformEnum(propSchema, resolvedName, propertyName, source);
-            _schemaMap[propSchema] = schema;
+            var schema = TransformEnum(resolved, resolvedName, propertyName, source);
+            _schemaMap[resolved] = schema;
             _allSchemas.Add(schema);
             return schema;
         }
 
-        var primitiveType = MapPrimitiveType(propSchema.Type, propSchema.Format, propertyName, source);
+        var primitiveType = MapPrimitiveType(resolved.Type, resolved.Format, propertyName, source);
         var primitiveSchema = new ApiSchema
         {
             Name = propertyName,
             OriginalName = propertyName,
             Kind = SchemaKind.Primitive,
             PrimitiveType = primitiveType,
-            IsNullable = propSchema.Nullable,
-            IsDeprecated = propSchema.Deprecated,
-            Description = propSchema.Description,
+            IsNullable = IsNullable(resolved),
+            IsDeprecated = resolved.Deprecated,
+            Description = resolved.Description,
             Source = source,
         };
-        _schemaMap[propSchema] = primitiveSchema;
+        _schemaMap[resolved] = primitiveSchema;
         return primitiveSchema;
     }
 
-    private PrimitiveType MapPrimitiveType(string? type, string? format, string context, string source)
+    private PrimitiveType MapPrimitiveType(JsonSchemaType? type, string? format, string context, string source)
     {
-        return (type, format) switch
+        var baseType = type.HasValue ? (type.Value & ~JsonSchemaType.Null) : (JsonSchemaType?)null;
+        return (baseType, format) switch
         {
-            ("string", "date-time") => Model.PrimitiveType.DateTimeOffset,
-            ("string", "date") => Model.PrimitiveType.DateOnly,
-            ("string", "time") => Model.PrimitiveType.TimeOnly,
-            ("string", "duration") => Model.PrimitiveType.TimeSpan,
-            ("string", "uuid") => Model.PrimitiveType.Guid,
-            ("string", "uri") => Model.PrimitiveType.Uri,
-            ("string", "byte") => Model.PrimitiveType.ByteArray,
-            ("string", "binary") => Model.PrimitiveType.ByteArray,
-            ("string", null or "") => Model.PrimitiveType.String,
-            ("string", _) => HandleUnknownFormat(format!, context, source),
-            ("integer", "int64") => Model.PrimitiveType.Int64,
-            ("integer", _) => Model.PrimitiveType.Int32,
-            ("number", "float") => Model.PrimitiveType.Float,
-            ("number", "decimal") => Model.PrimitiveType.Decimal,
-            ("number", _) => Model.PrimitiveType.Double,
-            ("boolean", _) => Model.PrimitiveType.Bool,
+            (JsonSchemaType.String, "date-time") => Model.PrimitiveType.DateTimeOffset,
+            (JsonSchemaType.String, "date") => Model.PrimitiveType.DateOnly,
+            (JsonSchemaType.String, "time") => Model.PrimitiveType.TimeOnly,
+            (JsonSchemaType.String, "duration") => Model.PrimitiveType.TimeSpan,
+            (JsonSchemaType.String, "uuid") => Model.PrimitiveType.Guid,
+            (JsonSchemaType.String, "uri") => Model.PrimitiveType.Uri,
+            (JsonSchemaType.String, "byte") => Model.PrimitiveType.ByteArray,
+            (JsonSchemaType.String, "binary") => Model.PrimitiveType.ByteArray,
+            (JsonSchemaType.String, null or "") => Model.PrimitiveType.String,
+            (JsonSchemaType.String, _) => HandleUnknownFormat(format!, context, source),
+            (JsonSchemaType.Integer, "int64") => Model.PrimitiveType.Int64,
+            (JsonSchemaType.Integer, _) => Model.PrimitiveType.Int32,
+            (JsonSchemaType.Number, "float") => Model.PrimitiveType.Float,
+            (JsonSchemaType.Number, "decimal") => Model.PrimitiveType.Decimal,
+            (JsonSchemaType.Number, _) => Model.PrimitiveType.Double,
+            (JsonSchemaType.Boolean, _) => Model.PrimitiveType.Bool,
             _ => Model.PrimitiveType.String,
         };
     }

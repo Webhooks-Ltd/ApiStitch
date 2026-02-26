@@ -1,4 +1,4 @@
-namespace SampleApi.Models;
+namespace PetStore.SharedModels;
 
 public class Pet
 {

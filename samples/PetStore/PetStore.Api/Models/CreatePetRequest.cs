@@ -1,4 +1,4 @@
-namespace SampleApi.Models;
+namespace PetStore.Api.Models;
 
 public class CreatePetRequest
 {

@@ -99,6 +99,7 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
                 OutputDir = resolvedOutput,
                 OutputStyle = outputStyle,
                 ClientName = clientNameArg ?? loadedConfig.ClientName,
+                TypeReuse = loadedConfig.TypeReuse,
             };
         }
         else

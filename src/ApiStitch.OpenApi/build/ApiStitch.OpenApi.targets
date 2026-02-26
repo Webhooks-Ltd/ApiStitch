@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <OpenApiGenerateDocumentsOnBuild Condition="'$(OpenApiGenerateDocumentsOnBuild)' == ''">true</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiDocumentsDirectory Condition="'$(OpenApiDocumentsDirectory)' == ''">$(MSBuildProjectDirectory)</OpenApiDocumentsDirectory>
+  </PropertyGroup>
+</Project>

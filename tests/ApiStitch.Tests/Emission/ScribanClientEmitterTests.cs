@@ -263,4 +263,131 @@ public class ScribanClientEmitterTests
             f.RelativePath.EndsWith("Extensions.cs")
             && !f.RelativePath.Contains("ServiceCollectionExtensions"));
     }
+
+    [Fact]
+    public void ExternalEnumQueryParam_NoExtensionsFile_UsesToString()
+    {
+        var statusSchema = new ApiSchema
+        {
+            Name = "PetStatus",
+            OriginalName = "petStatus",
+            Kind = SchemaKind.Enum,
+            ExternalClrTypeName = "SampleApi.Models.PetStatus",
+            CSharpTypeName = "SampleApi.Models.PetStatus",
+            EnumValues =
+            [
+                new ApiEnumMember { Name = "available", CSharpName = "Available" },
+            ],
+        };
+
+        var op = new ApiOperation
+        {
+            OperationId = "listPets",
+            Path = "pets",
+            HttpMethod = ApiHttpMethod.Get,
+            Tag = "Pets",
+            CSharpMethodName = "ListPetsAsync",
+            Parameters =
+            [
+                new ApiParameter
+                {
+                    Name = "status",
+                    CSharpName = "status",
+                    Location = ParameterLocation.Query,
+                    Schema = statusSchema,
+                    IsRequired = false,
+                },
+            ],
+        };
+
+        var spec = CreateSpec("TestApi", [op], [statusSchema]);
+        var emitter = new ScribanClientEmitter();
+        var result = emitter.Emit(spec, DefaultConfig);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "PetStatusExtensions.cs");
+        var implFile = result.Files.First(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains(".ToString()", implFile.Content);
+        Assert.DoesNotContain(".ToQueryString()", implFile.Content);
+    }
+
+    [Fact]
+    public void ExternalType_InReturnType_UsesFQN()
+    {
+        var petSchema = new ApiSchema
+        {
+            Name = "Pet",
+            OriginalName = "pet",
+            Kind = SchemaKind.Object,
+            ExternalClrTypeName = "SampleApi.Models.Pet",
+            CSharpTypeName = "SampleApi.Models.Pet",
+        };
+
+        var op = new ApiOperation
+        {
+            OperationId = "getPet",
+            Path = "pets/{id}",
+            HttpMethod = ApiHttpMethod.Get,
+            Tag = "Pets",
+            CSharpMethodName = "GetPetAsync",
+            Parameters =
+            [
+                new ApiParameter
+                {
+                    Name = "id",
+                    CSharpName = "id",
+                    Location = ParameterLocation.Path,
+                    Schema = new ApiSchema { Name = "int", OriginalName = "int", Kind = SchemaKind.Primitive, PrimitiveType = PrimitiveType.Int32, CSharpTypeName = "int" },
+                    IsRequired = true,
+                },
+            ],
+            SuccessResponse = new ApiResponse
+            {
+                StatusCode = 200,
+                ContentType = "application/json",
+                Schema = petSchema,
+            },
+        };
+
+        var spec = CreateSpec("TestApi", [op]);
+        var emitter = new ScribanClientEmitter();
+        var result = emitter.Emit(spec, DefaultConfig);
+
+        var interfaceFile = result.Files.First(f => f.RelativePath.StartsWith("I") && f.RelativePath.Contains("Client"));
+        Assert.Contains("Task<SampleApi.Models.Pet>", interfaceFile.Content);
+    }
+
+    [Fact]
+    public void ExternalType_InRequestBody_UsesFQN()
+    {
+        var requestSchema = new ApiSchema
+        {
+            Name = "CreatePetRequest",
+            OriginalName = "createPetRequest",
+            Kind = SchemaKind.Object,
+            ExternalClrTypeName = "SampleApi.Models.CreatePetRequest",
+            CSharpTypeName = "SampleApi.Models.CreatePetRequest",
+        };
+
+        var op = new ApiOperation
+        {
+            OperationId = "createPet",
+            Path = "pets",
+            HttpMethod = ApiHttpMethod.Post,
+            Tag = "Pets",
+            CSharpMethodName = "CreatePetAsync",
+            RequestBody = new ApiRequestBody
+            {
+                ContentType = "application/json",
+                Schema = requestSchema,
+                IsRequired = true,
+            },
+        };
+
+        var spec = CreateSpec("TestApi", [op]);
+        var emitter = new ScribanClientEmitter();
+        var result = emitter.Emit(spec, DefaultConfig);
+
+        var interfaceFile = result.Files.First(f => f.RelativePath.StartsWith("I") && f.RelativePath.Contains("Client"));
+        Assert.Contains("SampleApi.Models.CreatePetRequest body", interfaceFile.Content);
+    }
 }

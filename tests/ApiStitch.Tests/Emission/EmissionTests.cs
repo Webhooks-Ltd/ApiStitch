@@ -97,13 +97,11 @@ public class EmissionTests
 
         var expected = """
             #nullable enable
-            using System.CodeDom.Compiler;
             using System.Text.Json.Serialization;
 
             namespace TestApi.Models;
 
             [JsonSerializable(typeof(Pet))]
-            [GeneratedCode("ApiStitch", null)]
             [JsonSourceGenerationOptions]
             public partial class ModelsJsonContext : JsonSerializerContext;
 

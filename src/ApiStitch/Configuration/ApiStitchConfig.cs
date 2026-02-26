@@ -19,4 +19,7 @@ public class ApiStitchConfig
 
     /// <summary>Optional client name override. When null, derived from the spec's info.title.</summary>
     public string? ClientName { get; init; }
+
+    /// <summary>Configuration for type reuse via x-apistitch-type vendor extensions.</summary>
+    public TypeReuseConfig TypeReuse { get; init; } = new();
 }

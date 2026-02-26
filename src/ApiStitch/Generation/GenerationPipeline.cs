@@ -41,6 +41,10 @@ public class GenerationPipeline
         allDiagnostics.AddRange(transformDiagnostics);
 
         InheritanceDetector.Detect(specification);
+
+        var resolveDiagnostics = ExternalTypeResolver.Resolve(specification, config);
+        allDiagnostics.AddRange(resolveDiagnostics);
+
         CSharpTypeMapper.MapAll(specification);
 
         var (operations, clientName, opDiagnostics) = OperationTransformer.Transform(document, schemaMap, config);

@@ -71,6 +71,21 @@ public static class ConfigLoader
             }
         }
 
+        var typeReuse = new TypeReuseConfig
+        {
+            IncludeNamespaces = dto.TypeReuse?.IncludeNamespaces?
+                .Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [],
+            IncludeTypes = dto.TypeReuse?.IncludeTypes?
+                .Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [],
+            ExcludeNamespaces = dto.TypeReuse?.ExcludeNamespaces?
+                .Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [],
+            ExcludeTypes = dto.TypeReuse?.ExcludeTypes?
+                .Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [],
+            NamespaceMap = dto.TypeReuse?.NamespaceMap?
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value) ?? [],
+        };
+
         var config = new ApiStitchConfig
         {
             Spec = dto.Spec!,
@@ -78,6 +93,7 @@ public static class ConfigLoader
             OutputDir = string.IsNullOrWhiteSpace(dto.OutputDir) ? "./Generated" : dto.OutputDir!,
             OutputStyle = outputStyle,
             ClientName = string.IsNullOrWhiteSpace(dto.ClientName) ? null : dto.ClientName!.Trim(),
+            TypeReuse = typeReuse,
         };
 
         var delivery = new FileWriteOptions
@@ -96,10 +112,20 @@ public static class ConfigLoader
         public string? OutputStyle { get; set; }
         public string? ClientName { get; set; }
         public DeliveryDto? Delivery { get; set; }
+        public TypeReuseDto? TypeReuse { get; set; }
     }
 
     private class DeliveryDto
     {
         public bool? CleanOutput { get; set; }
+    }
+
+    private class TypeReuseDto
+    {
+        public List<string>? IncludeNamespaces { get; set; }
+        public List<string>? IncludeTypes { get; set; }
+        public List<string>? ExcludeNamespaces { get; set; }
+        public List<string>? ExcludeTypes { get; set; }
+        public Dictionary<string, string>? NamespaceMap { get; set; }
     }
 }

@@ -1,0 +1,6 @@
+spec: ../PetStore.Api.json
+namespace: PetStore.Client.Generated
+clientName: PetStoreApi
+typeReuse:
+  includeNamespaces:
+    - "PetStore.SharedModels.*"
