@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>ApiStitch.OpenApi</PackageId>
     <Description>Enriches ASP.NET Core OpenAPI specs with CLR type names for ApiStitch type reuse.</Description>
     <Authors>ApiStitch Contributors</Authors>
@@ -14,12 +14,20 @@
     <InternalsVisibleTo Include="ApiStitch.OpenApi.Tests" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.*" />
+  <PropertyGroup>
+    <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.*">
+      <PrivateAssets>none</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.*" />
+  <ItemGroup>
+    <None Include="build\ApiStitch.OpenApi.targets" Pack="true" PackagePath="build\" />
+    <None Include="build\ApiStitch.OpenApi.targets" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
 </Project>

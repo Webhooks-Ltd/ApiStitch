@@ -2,7 +2,7 @@ using System.Text;
 using ApiStitch.Configuration;
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 
 namespace ApiStitch.Parsing;
 
@@ -11,12 +11,12 @@ namespace ApiStitch.Parsing;
 /// </summary>
 public class OperationTransformer
 {
-    private readonly IReadOnlyDictionary<OpenApiSchema, ApiSchema> _schemaMap;
+    private readonly IReadOnlyDictionary<IOpenApiSchema, ApiSchema> _schemaMap;
     private readonly ApiStitchConfig _config;
     private readonly List<Diagnostic> _diagnostics = [];
     private string _clientName = null!;
 
-    private OperationTransformer(IReadOnlyDictionary<OpenApiSchema, ApiSchema> schemaMap, ApiStitchConfig config)
+    private OperationTransformer(IReadOnlyDictionary<IOpenApiSchema, ApiSchema> schemaMap, ApiStitchConfig config)
     {
         _schemaMap = schemaMap;
         _config = config;
@@ -27,27 +27,45 @@ public class OperationTransformer
     /// </summary>
     public static (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) Transform(
         OpenApiDocument document,
-        IReadOnlyDictionary<OpenApiSchema, ApiSchema> schemaMap,
+        IReadOnlyDictionary<IOpenApiSchema, ApiSchema> schemaMap,
         ApiStitchConfig config)
     {
         var transformer = new OperationTransformer(schemaMap, config);
         return transformer.TransformAll(document);
     }
 
+    private static IOpenApiSchema ResolveRef(IOpenApiSchema schema) => OpenApiSchemaHelpers.ResolveRef(schema);
+    private static JsonSchemaType? GetBaseType(IOpenApiSchema schema) => OpenApiSchemaHelpers.GetBaseType(schema);
+    private static bool IsNullable(IOpenApiSchema schema) => OpenApiSchemaHelpers.IsNullable(schema);
+
     private (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformAll(OpenApiDocument document)
     {
         _clientName = DeriveClientName(document);
         var operations = new List<ApiOperation>();
 
-        foreach (var (path, pathItem) in document.Paths ?? Enumerable.Empty<KeyValuePair<string, OpenApiPathItem>>())
+        if (document.Paths is not null)
         {
-            var relativePath = path.TrimStart('/');
-
-            foreach (var (operationType, operation) in pathItem.Operations)
+            foreach (var (path, pathItem) in document.Paths)
             {
-                var merged = MergeParameters(pathItem.Parameters, operation.Parameters);
-                var results = TransformOperation(relativePath, operationType, operation, merged);
-                operations.AddRange(results);
+                var relativePath = path.TrimStart('/');
+
+                foreach (var (operationType, operation) in pathItem.Operations ?? [])
+                {
+                    var httpMethod = MapHttpMethod(operationType.Method);
+                    if (httpMethod is null)
+                    {
+                        _diagnostics.Add(new Diagnostic(
+                            DiagnosticSeverity.Warning,
+                            DiagnosticCodes.UnsupportedHttpMethod,
+                            $"Unsupported HTTP method '{operationType.Method}' on '/{relativePath}'. Operation skipped.",
+                            $"#/paths/{relativePath}"));
+                        continue;
+                    }
+
+                    var merged = MergeParameters(pathItem.Parameters, operation.Parameters);
+                    var results = TransformOperation(relativePath, httpMethod.Value, operation, merged);
+                    operations.AddRange(results);
+                }
             }
         }
 
@@ -79,13 +97,12 @@ public class OperationTransformer
 
     private List<ApiOperation> TransformOperation(
         string path,
-        OperationType operationType,
+        ApiHttpMethod httpMethod,
         OpenApiOperation operation,
-        IReadOnlyList<OpenApiParameter> mergedParameters)
+        IReadOnlyList<IOpenApiParameter> mergedParameters)
     {
-        var httpMethod = MapHttpMethod(operationType);
         var operationId = operation.OperationId;
-        var specPath = $"#/paths/{path}/{operationType.ToString().ToLowerInvariant()}";
+        var specPath = $"#/paths/{path}/{httpMethod.ToString().ToLowerInvariant()}";
 
         if (string.IsNullOrWhiteSpace(operationId))
         {
@@ -93,7 +110,7 @@ public class OperationTransformer
             _diagnostics.Add(new Diagnostic(
                 DiagnosticSeverity.Warning,
                 DiagnosticCodes.MissingOperationId,
-                $"Operation '{operationType.ToString().ToUpperInvariant()} /{path}' has no operationId. Derived name: '{operationId}'. Consider adding operationId to the spec.",
+                $"Operation '{httpMethod.ToString().ToUpperInvariant()} /{path}' has no operationId. Derived name: '{operationId}'. Consider adding operationId to the spec.",
                 specPath));
         }
 
@@ -111,8 +128,8 @@ public class OperationTransformer
         if (responseSkip)
             return [];
 
-        var tags = operation.Tags?.Select(t => t.Name).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
-                   ?? [];
+        var tags = operation.Tags?.Select(t => t.Name).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToList()
+                   ?? new List<string>();
 
         if (tags.Count == 0)
             tags = [_clientName];
@@ -139,7 +156,7 @@ public class OperationTransformer
     }
 
     private (IReadOnlyList<ApiParameter> Parameters, List<Diagnostic>? Diagnostics) TransformParameters(
-        IReadOnlyList<OpenApiParameter> parameters,
+        IReadOnlyList<IOpenApiParameter> parameters,
         string specPath)
     {
         var result = new List<ApiParameter>();
@@ -147,7 +164,7 @@ public class OperationTransformer
 
         foreach (var param in parameters)
         {
-            if (param.In == Microsoft.OpenApi.Models.ParameterLocation.Cookie)
+            if (param.In == Microsoft.OpenApi.ParameterLocation.Cookie)
             {
                 diagnostics.Add(new Diagnostic(
                     DiagnosticSeverity.Warning,
@@ -159,16 +176,16 @@ public class OperationTransformer
 
             var location = param.In switch
             {
-                Microsoft.OpenApi.Models.ParameterLocation.Path => Model.ParameterLocation.Path,
-                Microsoft.OpenApi.Models.ParameterLocation.Query => Model.ParameterLocation.Query,
-                Microsoft.OpenApi.Models.ParameterLocation.Header => Model.ParameterLocation.Header,
+                Microsoft.OpenApi.ParameterLocation.Path => Model.ParameterLocation.Path,
+                Microsoft.OpenApi.ParameterLocation.Query => Model.ParameterLocation.Query,
+                Microsoft.OpenApi.ParameterLocation.Header => Model.ParameterLocation.Header,
                 _ => (Model.ParameterLocation?)null
             };
 
             if (location is null)
                 continue;
 
-            if (location == Model.ParameterLocation.Query && param.Schema?.Type == "array")
+            if (location == Model.ParameterLocation.Query && param.Schema is not null && GetBaseType(ResolveRef(param.Schema)) == JsonSchemaType.Array)
             {
                 if (param.Explode == false)
                 {
@@ -181,7 +198,7 @@ public class OperationTransformer
                 }
             }
 
-            var schema = ResolveParameterSchema(param.Schema, param.Name, specPath);
+            var schema = ResolveParameterSchema(param.Schema, param.Name ?? "", specPath);
             if (schema is null)
                 continue;
 
@@ -189,8 +206,8 @@ public class OperationTransformer
 
             result.Add(new ApiParameter
             {
-                Name = param.Name,
-                CSharpName = ToCamelCase(NamingHelper.ToPascalCase(param.Name)),
+                Name = param.Name ?? "",
+                CSharpName = ToCamelCase(NamingHelper.ToPascalCase(param.Name ?? "")),
                 Location = location.Value,
                 Schema = schema,
                 IsRequired = isRequired,
@@ -201,15 +218,16 @@ public class OperationTransformer
         return (result, diagnostics.Count > 0 ? diagnostics : null);
     }
 
-    private ApiSchema? ResolveParameterSchema(OpenApiSchema? schema, string paramName, string specPath)
+    private ApiSchema? ResolveParameterSchema(IOpenApiSchema? schema, string paramName, string specPath)
     {
         if (schema is null)
             return null;
 
-        if (_schemaMap.TryGetValue(schema, out var mapped))
+        var resolved = ResolveRef(schema);
+        if (_schemaMap.TryGetValue(resolved, out var mapped))
             return mapped;
 
-        if (schema.AllOf is { Count: > 0 })
+        if (resolved.AllOf is { Count: > 0 })
         {
             _diagnostics.Add(new Diagnostic(
                 DiagnosticSeverity.Warning,
@@ -219,7 +237,7 @@ public class OperationTransformer
             return null;
         }
 
-        if (schema.Type == "object" && schema.Properties is { Count: > 0 })
+        if (GetBaseType(resolved) == JsonSchemaType.Object && resolved.Properties is { Count: > 0 })
         {
             _diagnostics.Add(new Diagnostic(
                 DiagnosticSeverity.Warning,
@@ -229,9 +247,9 @@ public class OperationTransformer
             return null;
         }
 
-        if (schema.Type == "array")
+        if (GetBaseType(resolved) == JsonSchemaType.Array)
         {
-            var itemSchema = schema.Items != null ? ResolveParameterSchema(schema.Items, paramName, specPath) : null;
+            var itemSchema = resolved.Items != null ? ResolveParameterSchema(resolved.Items, paramName, specPath) : null;
             return new ApiSchema
             {
                 Name = paramName,
@@ -242,22 +260,29 @@ public class OperationTransformer
             };
         }
 
-        var primitiveType = MapInlinePrimitive(schema);
+        var primitiveType = MapInlinePrimitive(resolved);
         return new ApiSchema
         {
             Name = paramName,
             OriginalName = paramName,
             Kind = SchemaKind.Primitive,
             PrimitiveType = primitiveType,
-            IsNullable = schema.Nullable,
+            IsNullable = IsNullable(resolved),
             Source = specPath,
         };
     }
 
-    private (ApiRequestBody? Body, bool SkipOperation) TransformRequestBody(OpenApiRequestBody? requestBody, string specPath)
+    private (ApiRequestBody? Body, bool SkipOperation) TransformRequestBody(IOpenApiRequestBody? requestBody, string specPath)
     {
         if (requestBody is null)
             return (null, false);
+
+        if (requestBody.Content is null || requestBody.Content.Count == 0)
+        {
+            if (requestBody.Required)
+                return (null, true);
+            return (null, false);
+        }
 
         var jsonContent = requestBody.Content
             .FirstOrDefault(c => c.Key.Equals("application/json", StringComparison.OrdinalIgnoreCase));
@@ -299,17 +324,19 @@ public class OperationTransformer
         }, false);
     }
 
-    private ApiSchema? ResolveBodySchema(OpenApiSchema? schema, string specPath)
+    private ApiSchema? ResolveBodySchema(IOpenApiSchema? schema, string specPath)
     {
         if (schema is null)
             return null;
 
-        if (_schemaMap.TryGetValue(schema, out var mapped))
+        var resolved = ResolveRef(schema);
+        if (_schemaMap.TryGetValue(resolved, out var mapped))
             return mapped;
 
-        if (schema.Type == "array" && schema.Items != null)
+        if (GetBaseType(resolved) == JsonSchemaType.Array && resolved.Items != null)
         {
-            if (_schemaMap.TryGetValue(schema.Items, out var itemMapped))
+            var resolvedItems = ResolveRef(resolved.Items);
+            if (_schemaMap.TryGetValue(resolvedItems, out var itemMapped))
             {
                 return new ApiSchema
                 {
@@ -321,13 +348,15 @@ public class OperationTransformer
                 };
             }
 
-            var itemPrimitive = MapInlinePrimitive(schema.Items);
+            var itemPrimitive = MapInlinePrimitive(resolvedItems);
             if (itemPrimitive is not null)
             {
+                var baseType = GetBaseType(resolvedItems);
+                var typeName = baseType?.ToString().ToLowerInvariant() ?? "object";
                 var primSchema = new ApiSchema
                 {
-                    Name = schema.Items.Type ?? "object",
-                    OriginalName = schema.Items.Type ?? "object",
+                    Name = typeName,
+                    OriginalName = typeName,
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = itemPrimitive,
                     Source = specPath,
@@ -407,17 +436,19 @@ public class OperationTransformer
         }, false);
     }
 
-    private ApiSchema? ResolveResponseSchema(OpenApiSchema? schema, string specPath)
+    private ApiSchema? ResolveResponseSchema(IOpenApiSchema? schema, string specPath)
     {
         if (schema is null)
             return null;
 
-        if (_schemaMap.TryGetValue(schema, out var mapped))
+        var resolved = ResolveRef(schema);
+        if (_schemaMap.TryGetValue(resolved, out var mapped))
             return mapped;
 
-        if (schema.Type == "array" && schema.Items != null)
+        if (GetBaseType(resolved) == JsonSchemaType.Array && resolved.Items != null)
         {
-            if (_schemaMap.TryGetValue(schema.Items, out var itemMapped))
+            var resolvedItems = ResolveRef(resolved.Items);
+            if (_schemaMap.TryGetValue(resolvedItems, out var itemMapped))
             {
                 return new ApiSchema
                 {
@@ -429,13 +460,15 @@ public class OperationTransformer
                 };
             }
 
-            var itemPrimitive = MapInlinePrimitive(schema.Items);
+            var itemPrimitive = MapInlinePrimitive(resolvedItems);
             if (itemPrimitive is not null)
             {
+                var baseType = GetBaseType(resolvedItems);
+                var typeName = baseType?.ToString().ToLowerInvariant() ?? "object";
                 var primSchema = new ApiSchema
                 {
-                    Name = schema.Items.Type ?? "object",
-                    OriginalName = schema.Items.Type ?? "object",
+                    Name = typeName,
+                    OriginalName = typeName,
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = itemPrimitive,
                     Source = specPath,
@@ -475,7 +508,6 @@ public class OperationTransformer
 
                     var mutable = op;
                     seen[op.CSharpMethodName] = count + 1;
-                    // Need to create a new operation with the updated name since CSharpMethodName is init-only
                     var index = operations.IndexOf(op);
                     operations[index] = new ApiOperation
                     {
@@ -499,9 +531,9 @@ public class OperationTransformer
         }
     }
 
-    private static IReadOnlyList<OpenApiParameter> MergeParameters(
-        IList<OpenApiParameter>? pathLevel,
-        IList<OpenApiParameter>? operationLevel)
+    private static IReadOnlyList<IOpenApiParameter> MergeParameters(
+        IList<IOpenApiParameter>? pathLevel,
+        IList<IOpenApiParameter>? operationLevel)
     {
         if (pathLevel is null or { Count: 0 })
             return operationLevel?.ToList() ?? [];
@@ -509,10 +541,10 @@ public class OperationTransformer
         if (operationLevel is null or { Count: 0 })
             return pathLevel.ToList();
 
-        var opKeys = new HashSet<(string, Microsoft.OpenApi.Models.ParameterLocation?)>(
+        var opKeys = new HashSet<(string?, Microsoft.OpenApi.ParameterLocation?)>(
             operationLevel.Select(p => (p.Name, p.In)));
 
-        var merged = new List<OpenApiParameter>(operationLevel);
+        var merged = new List<IOpenApiParameter>(operationLevel);
         foreach (var pathParam in pathLevel)
         {
             if (!opKeys.Contains((pathParam.Name, pathParam.In)))
@@ -575,45 +607,47 @@ public class OperationTransformer
         return sb.ToString();
     }
 
-    private static ApiHttpMethod MapHttpMethod(OperationType operationType)
+    private static ApiHttpMethod? MapHttpMethod(string method)
     {
-        return operationType switch
+        return method.ToUpperInvariant() switch
         {
-            OperationType.Get => ApiHttpMethod.Get,
-            OperationType.Post => ApiHttpMethod.Post,
-            OperationType.Put => ApiHttpMethod.Put,
-            OperationType.Delete => ApiHttpMethod.Delete,
-            OperationType.Patch => ApiHttpMethod.Patch,
-            OperationType.Head => ApiHttpMethod.Head,
-            OperationType.Options => ApiHttpMethod.Options,
-            _ => ApiHttpMethod.Get,
+            "GET" => ApiHttpMethod.Get,
+            "POST" => ApiHttpMethod.Post,
+            "PUT" => ApiHttpMethod.Put,
+            "DELETE" => ApiHttpMethod.Delete,
+            "PATCH" => ApiHttpMethod.Patch,
+            "HEAD" => ApiHttpMethod.Head,
+            "OPTIONS" => ApiHttpMethod.Options,
+            _ => null,
         };
     }
 
-    private static PrimitiveType? MapInlinePrimitive(OpenApiSchema schema)
+    private static PrimitiveType? MapInlinePrimitive(IOpenApiSchema schema)
     {
-        if (schema.Type == "object" && schema.Properties is { Count: > 0 })
+        var baseType = GetBaseType(schema);
+
+        if (baseType == JsonSchemaType.Object && schema.Properties is { Count: > 0 })
             return null;
         if (schema.AllOf is { Count: > 0 })
             return null;
 
-        return (schema.Type, schema.Format) switch
+        return (baseType, schema.Format) switch
         {
-            ("string", "date-time") => PrimitiveType.DateTimeOffset,
-            ("string", "date") => PrimitiveType.DateOnly,
-            ("string", "time") => PrimitiveType.TimeOnly,
-            ("string", "duration") => PrimitiveType.TimeSpan,
-            ("string", "uuid") => PrimitiveType.Guid,
-            ("string", "uri") => PrimitiveType.Uri,
-            ("string", "byte") => PrimitiveType.ByteArray,
-            ("string", "binary") => PrimitiveType.ByteArray,
-            ("string", _) => PrimitiveType.String,
-            ("integer", "int64") => PrimitiveType.Int64,
-            ("integer", _) => PrimitiveType.Int32,
-            ("number", "float") => PrimitiveType.Float,
-            ("number", "decimal") => PrimitiveType.Decimal,
-            ("number", _) => PrimitiveType.Double,
-            ("boolean", _) => PrimitiveType.Bool,
+            (JsonSchemaType.String, "date-time") => PrimitiveType.DateTimeOffset,
+            (JsonSchemaType.String, "date") => PrimitiveType.DateOnly,
+            (JsonSchemaType.String, "time") => PrimitiveType.TimeOnly,
+            (JsonSchemaType.String, "duration") => PrimitiveType.TimeSpan,
+            (JsonSchemaType.String, "uuid") => PrimitiveType.Guid,
+            (JsonSchemaType.String, "uri") => PrimitiveType.Uri,
+            (JsonSchemaType.String, "byte") => PrimitiveType.ByteArray,
+            (JsonSchemaType.String, "binary") => PrimitiveType.ByteArray,
+            (JsonSchemaType.String, _) => PrimitiveType.String,
+            (JsonSchemaType.Integer, "int64") => PrimitiveType.Int64,
+            (JsonSchemaType.Integer, _) => PrimitiveType.Int32,
+            (JsonSchemaType.Number, "float") => PrimitiveType.Float,
+            (JsonSchemaType.Number, "decimal") => PrimitiveType.Decimal,
+            (JsonSchemaType.Number, _) => PrimitiveType.Double,
+            (JsonSchemaType.Boolean, _) => PrimitiveType.Bool,
             _ => PrimitiveType.String,
         };
     }

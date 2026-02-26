@@ -8,12 +8,18 @@ public static class CSharpTypeMapper
     {
         foreach (var schema in specification.Schemas)
         {
-            schema.CSharpTypeName = MapSchema(schema);
+            if (schema.IsExternal)
+                schema.CSharpTypeName = schema.ExternalClrTypeName;
+            else
+                schema.CSharpTypeName = MapSchema(schema);
         }
     }
 
     internal static string MapSchema(ApiSchema schema)
     {
+        if (schema.IsExternal)
+            return schema.ExternalClrTypeName!;
+
         return schema.Kind switch
         {
             SchemaKind.Primitive => MapPrimitive(schema.PrimitiveType ?? PrimitiveType.String),

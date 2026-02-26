@@ -226,6 +226,112 @@ public class GenerationTests
         }
     }
 
+    [Fact]
+    public void TypeReuse_ExternalSchemas_SkippedFromFiles_IncludedInContext()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "Pet.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "PetStatus.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "Category.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "CreatePetRequest.cs");
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.Contains("SampleApi.Models.Pet", contextFile.Content);
+        Assert.Contains("SampleApi.Models.PetStatus", contextFile.Content);
+        Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
+        Assert.Contains("CreatePetRequest", contextFile.Content);
+
+        Assert.Contains("IReadOnlyList<SampleApi.Models.Pet>", contextFile.Content);
+
+        var requestFile = result.Files.First(f => f.RelativePath == "CreatePetRequest.cs");
+        Assert.Contains("partial record CreatePetRequest", requestFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_ExclusionConfig_ExcludedTypesRegenerated()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
+                ExcludeNamespaces = ["Microsoft.AspNetCore.*"],
+                ExcludeTypes = ["SampleApi.Models.PetStatus"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "Pet.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "PetStatus.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Category.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "CreatePetRequest.cs");
+
+        Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.TypeReused);
+    }
+
+    [Fact]
+    public void TypeReuse_ExternalBase_DerivedUsesFQN()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-inheritance.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SharedModels.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "Animal.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Dog.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Cat.cs");
+
+        var dogFile = result.Files.First(f => f.RelativePath == "Dog.cs");
+        Assert.Contains("SharedModels.Animal", dogFile.Content);
+        Assert.Contains("sealed", dogFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_ExternalDerived_BaseEmitsNormally()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-inheritance.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SharedModels.*"],
+                ExcludeTypes = ["SharedModels.Animal"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(result.Files, f => f.RelativePath == "Animal.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Dog.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Cat.cs");
+
+        var animalFile = result.Files.First(f => f.RelativePath == "Animal.cs");
+        Assert.Contains("partial record Animal", animalFile.Content);
+    }
+
     private static string FormatDiagnostics(IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> diagnostics) =>
         $"Compilation failed:\n{string.Join("\n", diagnostics.Select(d => $"  {d.Location}: {d.GetMessage()}"))}";
 }

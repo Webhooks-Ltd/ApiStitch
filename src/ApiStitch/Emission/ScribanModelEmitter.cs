@@ -30,6 +30,13 @@ public class ScribanModelEmitter : IModelEmitter
 
         foreach (var schema in spec.Schemas.OrderBy(s => s.Name, StringComparer.Ordinal))
         {
+            if (schema.IsExternal)
+            {
+                if (schema.Kind is SchemaKind.Object or SchemaKind.Enum)
+                    typeNames.Add(schema.CSharpTypeName!);
+                continue;
+            }
+
             switch (schema.Kind)
             {
                 case SchemaKind.Object:
@@ -79,7 +86,7 @@ public class ScribanModelEmitter : IModelEmitter
         var model = new ScriptObject();
         model.Add("namespace", config.Namespace);
         model.Add("name", schema.Name);
-        model.Add("base_name", schema.BaseSchema?.Name);
+        model.Add("base_name", schema.BaseSchema?.CSharpTypeName);
         model.Add("is_sealed", schema.BaseSchema != null);
         model.Add("is_deprecated", schema.IsDeprecated);
         model.Add("has_additional_properties", schema.HasAdditionalProperties);

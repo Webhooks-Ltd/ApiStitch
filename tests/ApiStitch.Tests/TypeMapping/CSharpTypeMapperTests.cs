@@ -70,4 +70,68 @@ public class CSharpTypeMapperTests
         Assert.Equal("PetStatus", schemas[1].CSharpTypeName);
         Assert.Equal("long", schemas[2].CSharpTypeName);
     }
+
+    [Fact]
+    public void MapAll_ExternalObject_UsesFQN()
+    {
+        var schema = new ApiSchema
+        {
+            Name = "Pet", OriginalName = "Pet", Kind = SchemaKind.Object,
+            ExternalClrTypeName = "SampleApi.Models.Pet",
+        };
+        var spec = new ApiSpecification { Schemas = [schema] };
+
+        CSharpTypeMapper.MapAll(spec);
+
+        Assert.Equal("SampleApi.Models.Pet", schema.CSharpTypeName);
+    }
+
+    [Fact]
+    public void MapAll_ExternalEnum_UsesFQN()
+    {
+        var schema = new ApiSchema
+        {
+            Name = "PetStatus", OriginalName = "PetStatus", Kind = SchemaKind.Enum,
+            ExternalClrTypeName = "SampleApi.Models.PetStatus",
+        };
+        var spec = new ApiSpecification { Schemas = [schema] };
+
+        CSharpTypeMapper.MapAll(spec);
+
+        Assert.Equal("SampleApi.Models.PetStatus", schema.CSharpTypeName);
+    }
+
+    [Fact]
+    public void MapSchema_ArrayWithExternalItem_UsesFQN()
+    {
+        var itemSchema = new ApiSchema
+        {
+            Name = "Pet", OriginalName = "Pet", Kind = SchemaKind.Object,
+            ExternalClrTypeName = "SampleApi.Models.Pet",
+        };
+        var arraySchema = new ApiSchema
+        {
+            Name = "Pets", OriginalName = "Pets", Kind = SchemaKind.Array,
+            ArrayItemSchema = itemSchema,
+        };
+
+        var result = CSharpTypeMapper.MapSchema(arraySchema);
+
+        Assert.Equal("IReadOnlyList<SampleApi.Models.Pet>", result);
+    }
+
+    [Fact]
+    public void MapAll_NonExternal_Unchanged()
+    {
+        var schema = new ApiSchema
+        {
+            Name = "Pet", OriginalName = "Pet", Kind = SchemaKind.Object,
+        };
+        var spec = new ApiSpecification { Schemas = [schema] };
+
+        CSharpTypeMapper.MapAll(spec);
+
+        Assert.Equal("Pet", schema.CSharpTypeName);
+        Assert.False(schema.IsExternal);
+    }
 }

@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Type Reuse Inheritance Test API
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    Animal:
+      type: object
+      x-apistitch-type: SharedModels.Animal
+      properties:
+        name:
+          type: string
+      required: [name]
+    Dog:
+      allOf:
+        - $ref: '#/components/schemas/Animal'
+        - type: object
+          properties:
+            breed:
+              type: string
+          required: [breed]
+    Cat:
+      allOf:
+        - $ref: '#/components/schemas/Animal'
+        - type: object
+          properties:
+            indoor:
+              type: boolean
+          required: [indoor]

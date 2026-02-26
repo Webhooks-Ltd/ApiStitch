@@ -22,4 +22,13 @@ public static class DiagnosticCodes
 
     /// <summary>Warning: unsupported query parameter style (only explode: true supported).</summary>
     public const string UnsupportedQueryParameterStyle = "AS405";
+
+    /// <summary>Warning: unsupported HTTP method, operation skipped.</summary>
+    public const string UnsupportedHttpMethod = "AS406";
+
+    /// <summary>Info: type reused from external assembly (not generated).</summary>
+    public const string TypeReused = "AS500";
+
+    /// <summary>Info: type excluded from reuse by configuration, will be generated.</summary>
+    public const string TypeExcludedFromReuse = "AS501";
 }
