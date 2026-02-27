@@ -44,6 +44,8 @@ jobs:
 
       - run: dotnet pack src/ApiStitch.Cli/ApiStitch.Cli.csproj -c Release --no-build -o ./artifacts /p:Version=${{ steps.version.outputs.VERSION }}
 
+      - run: dotnet pack src/ApiStitch.OpenApi/ApiStitch.OpenApi.csproj -c Release --no-build -o ./artifacts /p:Version=${{ steps.version.outputs.VERSION }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: nuget-packages
