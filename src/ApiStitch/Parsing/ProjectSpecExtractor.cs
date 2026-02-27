@@ -23,7 +23,12 @@ public static class ProjectSpecExtractor
 
         var buildResult = await RunAsync("dotnet", $"build \"{projectPath}\" -c Release --nologo -v q", projectDir, cancellationToken);
         if (buildResult.ExitCode != 0)
-            return (null, $"Failed to build project: {buildResult.StdErr.Trim()}");
+        {
+            var buildDetail = !string.IsNullOrWhiteSpace(buildResult.StdErr)
+                ? buildResult.StdErr.Trim()
+                : buildResult.StdOut.Trim();
+            return (null, $"Failed to build '{Path.GetFileName(projectPath)}'. Fix the build errors and try again.\n\n{buildDetail}");
+        }
 
         var propsResult = await RunAsync("dotnet", $"msbuild \"{projectPath}\" -getProperty:TargetPath,ProjectAssetsFile,TargetFrameworkMoniker -nologo", projectDir, cancellationToken);
         if (propsResult.ExitCode != 0)
@@ -45,7 +50,11 @@ public static class ProjectSpecExtractor
 
         var getDocTool = FindGetDocumentTool(assetsFile);
         if (getDocTool is null)
-            return (null, "Could not find dotnet-getdocument tool. Ensure the project references Microsoft.Extensions.ApiDescription.Server.");
+            return (null, "Could not find dotnet-getdocument tool. "
+                + "Add this to your csproj:\n\n"
+                + "  <PackageReference Include=\"Microsoft.Extensions.ApiDescription.Server\" Version=\"*\" PrivateAssets=\"All\" />\n"
+                + "  <OpenApiGenerateDocumentsOnBuild>true</OpenApiGenerateDocumentsOnBuild>\n\n"
+                + "Or use --spec to point at an existing OpenAPI spec file instead of --project.");
 
         var outputDir = Path.Combine(Path.GetTempPath(), "apistitch-spec-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(outputDir);
@@ -68,7 +77,13 @@ public static class ProjectSpecExtractor
             var detail = !string.IsNullOrWhiteSpace(extractResult.StdErr)
                 ? extractResult.StdErr.Trim()
                 : extractResult.StdOut.Trim();
-            return (null, $"Failed to extract OpenAPI spec (exit code {extractResult.ExitCode}): {detail}");
+
+            if (detail.Contains("IDocumentProvider", StringComparison.OrdinalIgnoreCase))
+                return (null, $"The project's DI container does not have an OpenAPI document provider registered. "
+                    + "Ensure your Program.cs calls builder.Services.AddOpenApi() (.NET 9+) or builder.Services.AddSwaggerGen() (Swashbuckle).\n\n"
+                    + "Or use --spec to point at an existing OpenAPI spec file instead of --project.");
+
+            return (null, $"Failed to extract OpenAPI spec from '{Path.GetFileName(projectPath)}' (exit code {extractResult.ExitCode}):\n\n{detail}");
         }
 
         if (!File.Exists(fileList))
