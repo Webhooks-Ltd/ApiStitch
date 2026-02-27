@@ -74,6 +74,64 @@
         }
       }
     },
+    "/pets/{id}/avatar": {
+      "post": {
+        "tags": [
+          "Pets"
+        ],
+        "operationId": "SetPetAvatar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PetAvatar"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Pets"
+        ],
+        "operationId": "GetPetAvatar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/pets/search": {
       "get": {
         "tags": [
@@ -370,6 +428,23 @@
           }
         },
         "x-apistitch-type": "PetStore.SharedModels.Pet"
+      },
+      "PetAvatar": {
+        "required": [
+          "imageData",
+          "mimeType"
+        ],
+        "type": "object",
+        "properties": {
+          "imageData": {
+            "type": "string",
+            "format": "byte"
+          },
+          "mimeType": {
+            "type": "string"
+          }
+        },
+        "x-apistitch-type": "PetStore.Api.Models.PetAvatar"
       },
       "PetStatus": {
         "type": "integer",
