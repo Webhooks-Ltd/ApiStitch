@@ -1,4 +1,5 @@
 using ApiStitch.OpenApi;
+using Microsoft.AspNetCore.Mvc;
 using PetStore.Api.Models;
 using PetStore.SharedModels;
 
@@ -52,5 +53,58 @@ app.MapPost("/pets", (CreatePetRequest request) =>
 })
     .WithName("CreatePet")
     .WithTags("Pets");
+
+app.MapGet("/pets/search", (
+    [FromQuery(Name = "tags")] string[]? tags,
+    [FromQuery(Name = "status")] PetStatus? status) =>
+{
+    IEnumerable<Pet> result = pets;
+    if (tags is { Length: > 0 })
+        result = result.Where(p => p.Tag is not null && tags.Contains(p.Tag));
+    if (status is not null)
+        result = result.Where(p => p.Status == status);
+    return result.ToList();
+})
+    .WithName("SearchPets")
+    .WithTags("Pets");
+
+// ── Files (demonstrates multipart upload, octet-stream download) ──
+
+var files = new Dictionary<string, byte[]>();
+
+app.MapPost("/pets/{id:int}/photo", async (int id, [FromForm] UploadPetPhotoRequest request) =>
+{
+    using var ms = new MemoryStream();
+    await request.Photo.CopyToAsync(ms);
+    files[$"pet-{id}"] = ms.ToArray();
+    return Results.Ok(new
+    {
+        id,
+        photoName = request.Photo.FileName,
+        photoSize = ms.Length,
+        hasThumbnail = request.Thumbnail is not null,
+        description = request.Description,
+    });
+})
+    .WithName("UploadPetPhoto")
+    .WithTags("Pets")
+    .DisableAntiforgery();
+
+app.MapGet("/pets/{id:int}/photo", (int id) =>
+{
+    if (!files.TryGetValue($"pet-{id}", out var data))
+        return Results.NotFound();
+    return Results.File(data, "application/octet-stream", $"pet-{id}.jpg");
+})
+    .WithName("DownloadPetPhoto")
+    .WithTags("Pets")
+    .Produces<Stream>(200, "application/octet-stream");
+
+// ── Health (demonstrates text/plain response) ──
+
+app.MapGet("/health", () => Results.Text("healthy"))
+    .WithName("GetHealth")
+    .WithTags("System")
+    .Produces<string>(200, "text/plain");
 
 app.Run();

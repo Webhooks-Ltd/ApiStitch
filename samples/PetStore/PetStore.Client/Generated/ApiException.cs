@@ -16,11 +16,16 @@ public sealed class ApiException : HttpRequestException
     /// <summary>
     /// Creates a new <see cref="ApiException"/> with the specified status code and response details.
     /// </summary>
-    public ApiException(HttpStatusCode statusCode, string? responseBody, HttpResponseHeaders? responseHeaders)
+    public ApiException(
+        HttpStatusCode statusCode,
+        string? responseBody,
+        HttpResponseHeaders? responseHeaders,
+        ProblemDetails? problem = null)
         : base($"HTTP {(int)statusCode} ({statusCode})", inner: null, statusCode)
     {
         ResponseBody = responseBody;
         ResponseHeaders = responseHeaders;
+        Problem = problem;
     }
 
     /// <summary>
@@ -32,4 +37,9 @@ public sealed class ApiException : HttpRequestException
     /// The response headers from the failed request.
     /// </summary>
     public HttpResponseHeaders? ResponseHeaders { get; }
+
+    /// <summary>
+    /// Structured problem details from the response, if available.
+    /// </summary>
+    public ProblemDetails? Problem { get; }
 }

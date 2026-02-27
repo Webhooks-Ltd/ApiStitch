@@ -344,8 +344,8 @@ public class OperationTransformer
     private static readonly string[] RequestContentTypePreference =
     [
         "application/json",
-        "application/x-www-form-urlencoded",
         "multipart/form-data",
+        "application/x-www-form-urlencoded",
         "application/octet-stream",
         "text/plain",
     ];
@@ -633,11 +633,38 @@ public class OperationTransformer
         foreach (var (propName, propSchema) in resolved.Properties)
         {
             var resolvedProp = ResolveRef(propSchema);
+
+            // ASP.NET 10 emits oneOf: [null, $ref] for nullable reference types.
+            // Unwrap to the non-null $ref for schema resolution.
+            if (resolvedProp.OneOf is { Count: 2 })
+            {
+                var nonNull = resolvedProp.OneOf.FirstOrDefault(s =>
+                    s.Type != JsonSchemaType.Null);
+                if (nonNull is not null)
+                    resolvedProp = ResolveRef(nonNull);
+            }
+
             ApiSchema propApiSchema;
 
             if (_schemaMap.TryGetValue(resolvedProp, out var mapped))
             {
-                propApiSchema = mapped;
+                var isBinarySchema = mapped.PrimitiveType == PrimitiveType.ByteArray
+                    || (resolvedProp.Format is "binary" && GetBaseType(resolvedProp) == JsonSchemaType.String);
+                if (isBinaryContext && isBinarySchema)
+                {
+                    propApiSchema = new ApiSchema
+                    {
+                        Name = propName,
+                        OriginalName = propName,
+                        Kind = SchemaKind.Primitive,
+                        PrimitiveType = PrimitiveType.Stream,
+                        Source = specPath,
+                    };
+                }
+                else
+                {
+                    propApiSchema = mapped;
+                }
             }
             else if (isBinaryContext && GetBaseType(resolvedProp) == JsonSchemaType.String
                      && resolvedProp.Format is "binary")

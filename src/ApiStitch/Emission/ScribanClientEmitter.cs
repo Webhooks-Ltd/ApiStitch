@@ -274,15 +274,15 @@ public class ScribanClientEmitter : IClientEmitter
                     var hasJsonEncoding = requestBody.PropertyEncodings?.TryGetValue(prop.Name, out var enc) == true
                         && enc.ContentType.Contains("json", StringComparison.OrdinalIgnoreCase);
 
-                    if (!prop.IsRequired && !isBinary)
+                    if (!prop.IsRequired)
                         typeName += "?";
 
                     bodyParams.Add(new
                     {
                         type_name = typeName,
                         param_name = paramName,
-                        is_required = isBinary || prop.IsRequired,
-                        default_value = (isBinary || prop.IsRequired) ? (string?)null : "null",
+                        is_required = prop.IsRequired,
+                        default_value = prop.IsRequired ? (string?)null : "null",
                     });
 
                     string? fileNameParamName = null;
@@ -291,10 +291,10 @@ public class ScribanClientEmitter : IClientEmitter
                         fileNameParamName = paramName + "FileName";
                         bodyParams.Add(new
                         {
-                            type_name = "string",
+                            type_name = prop.IsRequired ? "string" : "string?",
                             param_name = fileNameParamName,
-                            is_required = true,
-                            default_value = (string?)null,
+                            is_required = prop.IsRequired,
+                            default_value = prop.IsRequired ? (string?)null : "null",
                         });
                     }
 

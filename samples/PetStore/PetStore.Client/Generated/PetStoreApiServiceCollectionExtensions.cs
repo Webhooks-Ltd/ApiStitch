@@ -43,6 +43,10 @@ public static class PetStoreApiServiceCollectionExtensions
             new PetStoreApiPetsClient(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<PetStoreApiJsonOptions>()));
+        services.TryAddTransient<IPetStoreApiSystemClient>(sp =>
+            new PetStoreApiSystemClient(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<PetStoreApiJsonOptions>()));
 
         return builder;
     }

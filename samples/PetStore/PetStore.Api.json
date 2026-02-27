@@ -74,6 +74,138 @@
         }
       }
     },
+    "/pets/search": {
+      "get": {
+        "tags": [
+          "Pets"
+        ],
+        "operationId": "SearchPets",
+        "parameters": [
+          {
+            "name": "tags",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PetStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Pet"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pets/{id}/photo": {
+      "post": {
+        "tags": [
+          "Pets"
+        ],
+        "operationId": "UploadPetPhoto",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadPetPhotoRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadPetPhotoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Pets"
+        ],
+        "operationId": "DownloadPetPhoto",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "GetHealth",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/Owners": {
       "get": {
         "tags": [
@@ -176,6 +308,11 @@
         },
         "x-apistitch-type": "PetStore.Api.Models.CreatePetRequest"
       },
+      "IFormFile": {
+        "type": "string",
+        "format": "binary",
+        "x-apistitch-type": "Microsoft.AspNetCore.Http.IFormFile"
+      },
       "Owner": {
         "required": [
           "id",
@@ -237,12 +374,48 @@
       "PetStatus": {
         "type": "integer",
         "x-apistitch-type": "PetStore.SharedModels.PetStatus"
+      },
+      "Stream": {
+        "type": "string",
+        "format": "binary",
+        "x-apistitch-type": "System.IO.Stream"
+      },
+      "UploadPetPhotoRequest": {
+        "required": [
+          "photo"
+        ],
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/IFormFile"
+          },
+          "thumbnail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IFormFile"
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "x-apistitch-type": "PetStore.Api.Models.UploadPetPhotoRequest"
       }
     }
   },
   "tags": [
     {
       "name": "Pets"
+    },
+    {
+      "name": "System"
     },
     {
       "name": "Owners"
