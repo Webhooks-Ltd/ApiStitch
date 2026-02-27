@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0-alpha.2] — 2026-02-27
+## 0.1.0-alpha.3 — 2026-02-27
+
+### Added
+
+- **ApiStitch.OpenApi NuGet package** — published alongside ApiStitch.Cli for producer-side type enrichment
+
+### Fixed
+
+- Actionable error when `dotnet-getdocument` is missing (shows exact csproj snippet, suggests `--spec` alternative)
+- Actionable error when `IDocumentProvider` not in DI (suggests `AddOpenApi()` or `AddSwaggerGen()`)
+- Build failure messages now include stdout fallback and project filename
+
+## 0.1.0-alpha.2 — 2026-02-27
 
 ### Fixed
 
 - Source Link enabled for debugger source stepping
 - Spec extraction error message now includes stdout fallback and exit code
 
-## [0.1.0-alpha.1] — 2026-02-27
+## 0.1.0-alpha.1 — 2026-02-27
 
 ### Added
 
@@ -45,7 +57,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PetStore sample** — end-to-end demo with JSON CRUD, multipart upload (multiple binary + text parts), file download, text/plain health check, array/enum query params, byte[] avatar, type reuse, error handling
 - **CI pipeline** — GitHub Actions for build + test on push/PR
 - **Release pipeline** — tag-triggered GitHub release + NuGet publish with prerelease support via SemVer suffix
-
-[Unreleased]: https://github.com/Webhooks-Ltd/ApiStitch/compare/v0.1.0-alpha.2...HEAD
-[0.1.0-alpha.2]: https://github.com/Webhooks-Ltd/ApiStitch/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
-[0.1.0-alpha.1]: https://github.com/Webhooks-Ltd/ApiStitch/releases/tag/v0.1.0-alpha.1
