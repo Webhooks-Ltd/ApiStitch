@@ -62,6 +62,14 @@ internal sealed partial class PetStoreApiPetsClient : IPetStoreApiPetsClient
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task GetPetAvatarAsync(int id, CancellationToken cancellationToken = default)
+    {
+        using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"pets/{Uri.EscapeDataString(id.ToString())}/avatar");
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<PetStore.SharedModels.Pet>> ListPetsAsync(CancellationToken cancellationToken = default)
     {
         using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
@@ -123,6 +131,15 @@ internal sealed partial class PetStoreApiPetsClient : IPetStoreApiPetsClient
         }
         return (await response.Content.ReadFromJsonAsync<IReadOnlyList<PetStore.SharedModels.Pet>>(
             _jsonOptions, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task SetPetAvatarAsync(int id, PetAvatar body, CancellationToken cancellationToken = default)
+    {
+        using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"pets/{Uri.EscapeDataString(id.ToString())}/avatar");
+        request.Content = JsonContent.Create(body, mediaType: null, _jsonOptions);
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task UploadPetPhotoAsync(int id, Stream photo, string photoFileName, Stream? thumbnail = null, string? thumbnailFileName = null, string? description = null, CancellationToken cancellationToken = default)

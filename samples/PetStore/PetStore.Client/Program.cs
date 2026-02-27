@@ -55,6 +55,15 @@ await petsClient.UploadPetPhotoAsync(
     description: "Fido at the park");
 Console.WriteLine("  Upload complete");
 
+// ── Set pet avatar (JSON body with byte[] → base64 encoded) ──
+Console.WriteLine("\nSetting avatar for pet 1...");
+await petsClient.SetPetAvatarAsync(id: 1, new PetAvatar
+{
+    ImageData = [0x89, 0x50, 0x4E, 0x47], // PNG magic bytes
+    MimeType = "image/png",
+});
+Console.WriteLine("  Avatar set (byte[] serialized as base64 in JSON)");
+
 // ── Download pet photo (octet-stream response → FileResponse with streaming) ──
 Console.WriteLine("\nDownloading photo for pet 1...");
 await using var fileResponse = await petsClient.DownloadPetPhotoAsync(id: 1);

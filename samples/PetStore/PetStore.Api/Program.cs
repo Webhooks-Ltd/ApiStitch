@@ -54,6 +54,18 @@ app.MapPost("/pets", (CreatePetRequest request) =>
     .WithName("CreatePet")
     .WithTags("Pets");
 
+app.MapPost("/pets/{id:int}/avatar", (int id, PetAvatar avatar) => Results.Ok(avatar))
+    .WithName("SetPetAvatar")
+    .WithTags("Pets");
+
+app.MapGet("/pets/{id:int}/avatar", (int id) => Results.Ok(new PetAvatar
+{
+    ImageData = [0xFF, 0xD8],
+    MimeType = "image/jpeg",
+}))
+    .WithName("GetPetAvatar")
+    .WithTags("Pets");
+
 app.MapGet("/pets/search", (
     [FromQuery(Name = "tags")] string[]? tags,
     [FromQuery(Name = "status")] PetStatus? status) =>

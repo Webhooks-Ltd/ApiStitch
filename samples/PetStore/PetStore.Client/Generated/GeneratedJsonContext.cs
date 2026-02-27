@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 namespace PetStore.Client.Generated;
 
 [JsonSerializable(typeof(CreatePetRequest))]
+[JsonSerializable(typeof(PetAvatar))]
 [JsonSerializable(typeof(PetStore.SharedModels.Owner))]
 [JsonSerializable(typeof(PetStore.SharedModels.Pet))]
 [JsonSerializable(typeof(ProblemDetails))]
