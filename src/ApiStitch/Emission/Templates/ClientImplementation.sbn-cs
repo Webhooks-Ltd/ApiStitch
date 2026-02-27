@@ -101,8 +101,11 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
 {{~ else if op.body_content_kind == "multipartformdata" ~}}
         using var content = new MultipartFormDataContent();
 {{~ for part in op.multipart_parts ~}}
-{{~ if part.is_binary ~}}
+{{~ if part.is_binary && part.is_required ~}}
         content.Add(new StreamContent({{ part.param_name }}), "{{ part.wire_name }}", {{ part.file_name_param_name }});
+{{~ else if part.is_binary ~}}
+        if ({{ part.param_name }} is not null)
+            content.Add(new StreamContent({{ part.param_name }}), "{{ part.wire_name }}", {{ part.file_name_param_name }} ?? "file");
 {{~ else if part.has_json_encoding ~}}
 {{~ if part.is_required ~}}
         content.Add(JsonContent.Create({{ part.param_name }}, mediaType: null, _jsonOptions), "{{ part.wire_name }}");
