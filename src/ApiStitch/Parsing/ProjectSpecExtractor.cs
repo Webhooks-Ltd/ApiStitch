@@ -13,14 +13,17 @@ public static class ProjectSpecExtractor
     /// Builds the project and extracts the OpenAPI spec to a temporary file.
     /// Returns the path to the extracted spec file.
     /// </summary>
-    public static async Task<(string? SpecPath, string? Error)> ExtractAsync(string projectPath, CancellationToken cancellationToken = default)
+    public static async Task<(string? SpecPath, string? Error)> ExtractAsync(
+        string projectPath, TextWriter? status = null, CancellationToken cancellationToken = default)
     {
         projectPath = Path.GetFullPath(projectPath);
         if (!File.Exists(projectPath))
             return (null, $"Project file not found: {projectPath}");
 
         var projectDir = Path.GetDirectoryName(projectPath)!;
+        var projectFileName = Path.GetFileName(projectPath);
 
+        status?.WriteLine($"Building {projectFileName} (Release)...");
         var buildResult = await RunAsync("dotnet", $"build \"{projectPath}\" -c Release --nologo -v q", projectDir, cancellationToken);
         if (buildResult.ExitCode != 0)
         {
@@ -71,6 +74,7 @@ public static class ProjectSpecExtractor
         args.Append($" --project \"{projectName}\"");
         args.Append($" --assets-file \"{assetsFile}\"");
 
+        status?.WriteLine($"Extracting OpenAPI spec from {projectFileName}...");
         var extractResult = await RunAsync("dotnet", args.ToString(), projectDir, cancellationToken);
         if (extractResult.ExitCode != 0)
         {

@@ -6,7 +6,7 @@ using ApiStitch.Generation;
 using ApiStitch.IO;
 
 var specOption = new Option<string?>("--spec") { Description = "Path to OpenAPI spec file" };
-var projectOption = new Option<string?>("--project") { Description = "Path to .csproj that produces an OpenAPI spec at build time" };
+var projectOption = new Option<string?>("--project") { Description = "Path to .csproj; the project will be built and run to extract its OpenAPI spec" };
 var outputOption = new Option<string?>("--output") { Description = "Output directory for generated files" };
 var namespaceOption = new Option<string?>("--namespace") { Description = "C# namespace for generated types" };
 var clientNameOption = new Option<string?>("--client-name") { Description = "Client name override" };
@@ -152,9 +152,8 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
         if (config.Spec == null && resolvedProjectPath != null)
         {
-            Console.Error.WriteLine($"Extracting OpenAPI spec from {Path.GetFileName(resolvedProjectPath)}...");
             var (extractedSpec, extractError) = await ApiStitch.Parsing.ProjectSpecExtractor.ExtractAsync(
-                resolvedProjectPath, linked.Token);
+                resolvedProjectPath, Console.Error, linked.Token);
 
             if (extractedSpec == null)
             {
@@ -215,7 +214,12 @@ static void WriteDiagnostics(IReadOnlyList<Diagnostic> diagnostics)
 {
     foreach (var d in diagnostics)
     {
-        var severity = d.Severity == DiagnosticSeverity.Error ? "error" : "warning";
+        var severity = d.Severity switch
+        {
+            DiagnosticSeverity.Error => "error",
+            DiagnosticSeverity.Warning => "warning",
+            _ => "info",
+        };
         var specPath = d.SpecPath != null ? $" [{d.SpecPath}]" : "";
         Console.Error.WriteLine($"{severity} {d.Code}: {d.Message}{specPath}");
     }
