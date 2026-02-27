@@ -49,6 +49,9 @@ coverage*/
 Thumbs.db
 desktop.ini
 
+## Claude Code
+.claude/
+
 ## Misc
 *.log
 *.tmp
