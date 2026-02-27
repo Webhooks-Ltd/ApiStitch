@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- ProblemDetails and ValidationProblemDetails now respect type reuse — when the schema has `x-apistitch-type` and matches include config, no local type is generated and the FQN is used in ApiException and client error handling
+- Info-level diagnostics (AS408, AS409, AS500, AS501) no longer display as "warning" in CLI output
+- `--project` CLI option now shows step-by-step progress (Building... / Extracting...) and description clarifies it will build and run the project
+
 ## 0.1.0-alpha.3 — 2026-02-27
 
 ### Added

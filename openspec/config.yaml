@@ -1,0 +1,25 @@
+context: |
+  # ApiStitch — .NET OpenAPI Client Generator
+
+  One-liner: A .NET OpenAPI client generator with first-class type reuse, clean idiomatic output, and zero-config MSBuild integration.
+  Tagline: API clients that use your types, not their own.
+  License: MIT
+
+  ## Pipeline Architecture
+
+  OpenAPI spec → Microsoft.OpenApi parse → Semantic model → Emitter → Generated C# source
+
+  ConfigLoader → OpenApiSpecLoader → SchemaTransformer → InheritanceDetector → ExternalTypeResolver → CSharpTypeMapper → ScribanModelEmitter + ScribanClientEmitter
+
+  ## Output Styles (roadmap)
+
+  - MMVP (current): Typed HttpClient wrappers (zero deps)
+  - MVP: Extension methods
+  - v1: Refit (optional, only if demand materialises)
+
+  ## Key Design Constraints
+
+  - AOT/trimming safe — no reflection in generated output
+  - Deterministic, diff-friendly — sorted alphabetically, no timestamps
+  - Partial classes on all generated types for extensibility
+  - Type reuse via x-apistitch-type vendor extensions + namespace include/exclude config
