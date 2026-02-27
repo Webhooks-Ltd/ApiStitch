@@ -38,12 +38,31 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
         var queryParams = new List<KeyValuePair<string, string?>>();
 {{~ for param in op.query_params ~}}
 {{~ if param.is_array ~}}
+{{~ if param.style == "form" && !param.explode ~}}
+        // Known limitation: BuildQueryString will URI-encode the commas in the joined value.
+        if ({{ param.param_name }} is not null)
+            queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", string.Join(",", {{ param.param_name }})));
+{{~ else ~}}
         if ({{ param.param_name }} is not null)
         {
             foreach (var item in {{ param.param_name }})
             {
                 queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
             }
+        }
+{{~ end ~}}
+{{~ else if param.is_deep_object && param.is_flattened ~}}
+{{~ for prop in param.deep_object_props ~}}
+        if ({{ prop.csharp_name }} is not null)
+            queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}[{{ prop.wire_name }}]", {{ prop.csharp_name }}.ToString()));
+{{~ end ~}}
+{{~ else if param.is_deep_object ~}}
+        if ({{ param.param_name }} is not null)
+        {
+{{~ for prop in param.deep_object_props ~}}
+            if ({{ param.param_name }}.{{ prop.csharp_name }} is not null)
+                queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}[{{ prop.wire_name }}]", {{ param.param_name }}.{{ prop.csharp_name }}.ToString()));
+{{~ end ~}}
         }
 {{~ else if param.is_required ~}}
         queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
@@ -55,6 +74,9 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
         var queryString = BuildQueryString(queryParams);
 {{~ end ~}}
         using var request = new HttpRequestMessage(HttpMethod.{{ op.http_method }}, $"{{ op.path_template }}{{ if op.has_query_params }}{queryString}{{ end }}");
+{{~ if op.accept_header ~}}
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("{{ op.accept_header }}"));
+{{~ end ~}}
 {{~ for param in op.header_params ~}}
 {{~ if param.is_required ~}}
         request.Headers.TryAddWithoutValidation("{{ param.wire_name }}", {{ param.to_string_expr }});
@@ -63,14 +85,87 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             request.Headers.TryAddWithoutValidation("{{ param.wire_name }}", {{ param.to_string_expr }});
 {{~ end ~}}
 {{~ end ~}}
-{{~ if op.has_body ~}}
+{{~ if op.body_content_kind == "json" ~}}
         request.Content = JsonContent.Create({{ op.body_param_name }}, mediaType: null, _jsonOptions);
+{{~ else if op.body_content_kind == "formurlencoded" ~}}
+        var formFields = new List<KeyValuePair<string, string?>>();
+{{~ for field in op.form_fields ~}}
+{{~ if field.is_required ~}}
+        formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.param_name }}));
+{{~ else ~}}
+        if ({{ field.param_name }} is not null)
+            formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.param_name }}));
 {{~ end ~}}
+{{~ end ~}}
+        request.Content = new FormUrlEncodedContent(formFields);
+{{~ else if op.body_content_kind == "multipartformdata" ~}}
+        using var content = new MultipartFormDataContent();
+{{~ for part in op.multipart_parts ~}}
+{{~ if part.is_binary ~}}
+        content.Add(new StreamContent({{ part.param_name }}), "{{ part.wire_name }}", {{ part.file_name_param_name }});
+{{~ else if part.has_json_encoding ~}}
+{{~ if part.is_required ~}}
+        content.Add(JsonContent.Create({{ part.param_name }}, mediaType: null, _jsonOptions), "{{ part.wire_name }}");
+{{~ else ~}}
+        if ({{ part.param_name }} is not null)
+            content.Add(JsonContent.Create({{ part.param_name }}, mediaType: null, _jsonOptions), "{{ part.wire_name }}");
+{{~ end ~}}
+{{~ else ~}}
+{{~ if part.is_required ~}}
+        content.Add(new StringContent({{ part.param_name }}.ToString()), "{{ part.wire_name }}");
+{{~ else ~}}
+        if ({{ part.param_name }} is not null)
+            content.Add(new StringContent({{ part.param_name }}.ToString()), "{{ part.wire_name }}");
+{{~ end ~}}
+{{~ end ~}}
+{{~ end ~}}
+        request.Content = content;
+{{~ else if op.body_content_kind == "octetstream" ~}}
+        request.Content = new StreamContent({{ op.body_param_name }});
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+{{~ else if op.body_content_kind == "plaintext" ~}}
+        request.Content = new StringContent({{ op.body_param_name }}, Encoding.UTF8, "text/plain");
+{{~ end ~}}
+{{~ if op.response_content_kind == "octetstream" ~}}
+        var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+            return await FileResponse.CreateAsync(response, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
+{{~ else if op.response_content_kind == "plaintext" ~}}
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+{{~ else ~}}
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
 {{~ if op.has_response_body ~}}
+{{~ if op.response_content_kind == "json" ~}}
+        var mediaType = response.Content.Headers.ContentType?.MediaType;
+        if (mediaType is not null
+            && !mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase)
+            && !mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase))
+        {
+            using var errorStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var errorReader = new StreamReader(errorStream);
+            var errorBuffer = new char[8192];
+            var errorRead = await errorReader.ReadAsync(errorBuffer, cancellationToken).ConfigureAwait(false);
+            var errorBody = new string(errorBuffer, 0, errorRead);
+            throw new ApiException(
+                response.StatusCode,
+                $"Expected application/json response but received {mediaType}. Body: {errorBody}",
+                response.Headers);
+        }
+{{~ end ~}}
         return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
             _jsonOptions, cancellationToken).ConfigureAwait(false))!;
+{{~ end ~}}
 {{~ end ~}}
     }
 
@@ -95,21 +190,35 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
     }
 
 {{~ end ~}}
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
             return;
 
         string? body = null;
+        ProblemDetails? problem = null;
+
         if (response.Content.Headers.ContentLength is not 0)
         {
-            using var reader = new StreamReader(
-                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false));
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream);
             var buffer = new char[8192];
             var read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             body = new string(buffer, 0, read);
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (contentType is "application/problem+json" or "application/json")
+            {
+                try
+                {
+                    problem = JsonSerializer.Deserialize<ProblemDetails>(body, _jsonOptions);
+                }
+                catch (JsonException)
+                {
+                }
+            }
         }
 
-        throw new ApiException(response.StatusCode, body, response.Headers);
+        throw new ApiException(response.StatusCode, body, response.Headers, problem);
     }
 }

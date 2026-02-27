@@ -50,6 +50,7 @@ public static class CSharpTypeMapper
             PrimitiveType.Guid => "Guid",
             PrimitiveType.Uri => "Uri",
             PrimitiveType.ByteArray => "byte[]",
+            PrimitiveType.Stream => "Stream",
             _ => "object"
         };
     }
@@ -61,6 +62,7 @@ public static class CSharpTypeMapper
             PrimitiveType.String => false,
             PrimitiveType.Uri => false,
             PrimitiveType.ByteArray => false,
+            PrimitiveType.Stream => false,
             _ => true
         };
     }

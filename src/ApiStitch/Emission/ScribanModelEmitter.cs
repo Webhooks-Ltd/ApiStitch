@@ -50,6 +50,9 @@ public class ScribanModelEmitter : IModelEmitter
             }
         }
 
+        if (spec.Operations.Count > 0)
+            typeNames.Add("ProblemDetails");
+
         files.Add(EmitJsonContext(typeNames, spec, config));
 
         files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.Ordinal));

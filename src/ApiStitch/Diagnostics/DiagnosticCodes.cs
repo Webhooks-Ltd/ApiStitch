@@ -17,14 +17,22 @@ public static class DiagnosticCodes
     /// <summary>Warning: method name collision within a tag, deduplicated with numeric suffix.</summary>
     public const string MethodNameCollision = "AS403";
 
-    /// <summary>Warning: unsupported content type (only application/json supported in MMVP).</summary>
+    /// <summary>Warning: unsupported content type (e.g. application/xml).</summary>
     public const string UnsupportedContentType = "AS404";
 
-    /// <summary>Warning: unsupported query parameter style (only explode: true supported).</summary>
-    public const string UnsupportedQueryParameterStyle = "AS405";
+    // AS405 retired (was UnsupportedQueryParameterStyle, removed when explode:false support added)
 
     /// <summary>Warning: unsupported HTTP method, operation skipped.</summary>
     public const string UnsupportedHttpMethod = "AS406";
+
+    /// <summary>Warning: unsupported parameter style/explode combination.</summary>
+    public const string UnsupportedParameterStyleCombination = "AS407";
+
+    /// <summary>Info: multipart encoding references unknown property name.</summary>
+    public const string UnknownEncodingProperty = "AS408";
+
+    /// <summary>Info: multiple content types available, one selected over others.</summary>
+    public const string ContentTypeNegotiated = "AS409";
 
     /// <summary>Info: type reused from external assembly (not generated).</summary>
     public const string TypeReused = "AS500";

@@ -22,4 +22,10 @@ public class ApiParameter
 
     /// <summary>Optional description from the OpenAPI spec.</summary>
     public string? Description { get; init; }
+
+    /// <summary>OpenAPI serialization style for this parameter.</summary>
+    public required ParameterStyle Style { get; init; }
+
+    /// <summary>Whether array/object values are exploded into separate key=value pairs.</summary>
+    public required bool Explode { get; init; }
 }

@@ -155,6 +155,57 @@ public class OperationTransformer
         return results;
     }
 
+    private static Model.ParameterStyle MapParameterStyle(Microsoft.OpenApi.ParameterStyle? openApiStyle, Model.ParameterLocation location)
+    {
+        if (openApiStyle is null)
+        {
+            return location switch
+            {
+                Model.ParameterLocation.Query => Model.ParameterStyle.Form,
+                Model.ParameterLocation.Path => Model.ParameterStyle.Simple,
+                Model.ParameterLocation.Header => Model.ParameterStyle.Simple,
+                _ => Model.ParameterStyle.Form,
+            };
+        }
+
+        return openApiStyle.Value switch
+        {
+            Microsoft.OpenApi.ParameterStyle.Form => Model.ParameterStyle.Form,
+            Microsoft.OpenApi.ParameterStyle.Simple => Model.ParameterStyle.Simple,
+            Microsoft.OpenApi.ParameterStyle.DeepObject => Model.ParameterStyle.DeepObject,
+            Microsoft.OpenApi.ParameterStyle.PipeDelimited => Model.ParameterStyle.PipeDelimited,
+            Microsoft.OpenApi.ParameterStyle.SpaceDelimited => Model.ParameterStyle.SpaceDelimited,
+            _ => Model.ParameterStyle.Form,
+        };
+    }
+
+    private static bool ResolveExplode(bool openApiExplode, Microsoft.OpenApi.ParameterStyle? openApiStyle, Model.ParameterLocation location)
+    {
+        // Microsoft.OpenApi v3.x applies OpenAPI spec defaults internally:
+        // Form/Cookie → true, others → false (when not explicitly set).
+        // So param.Explode already has the correct value when style is set.
+        if (openApiStyle is not null)
+            return openApiExplode;
+
+        // When style is not set, apply location-based defaults.
+        return location switch
+        {
+            Model.ParameterLocation.Query => true,
+            _ => false,
+        };
+    }
+
+    private static bool IsUnsupportedStyleCombination(Model.ParameterStyle style, bool explode)
+    {
+        return style switch
+        {
+            Model.ParameterStyle.DeepObject when !explode => true,
+            Model.ParameterStyle.PipeDelimited => true,
+            Model.ParameterStyle.SpaceDelimited => true,
+            _ => false,
+        };
+    }
+
     private (IReadOnlyList<ApiParameter> Parameters, List<Diagnostic>? Diagnostics) TransformParameters(
         IReadOnlyList<IOpenApiParameter> parameters,
         string specPath)
@@ -185,20 +236,33 @@ public class OperationTransformer
             if (location is null)
                 continue;
 
-            if (location == Model.ParameterLocation.Query && param.Schema is not null && GetBaseType(ResolveRef(param.Schema)) == JsonSchemaType.Array)
+            var style = MapParameterStyle(param.Style, location.Value);
+            var explode = ResolveExplode(param.Explode, param.Style, location.Value);
+
+            if (param.Style is Microsoft.OpenApi.ParameterStyle.Matrix
+                or Microsoft.OpenApi.ParameterStyle.Label
+                or Microsoft.OpenApi.ParameterStyle.Cookie)
             {
-                if (param.Explode == false)
-                {
-                    diagnostics.Add(new Diagnostic(
-                        DiagnosticSeverity.Warning,
-                        DiagnosticCodes.UnsupportedQueryParameterStyle,
-                        $"Query parameter '{param.Name}' uses non-explode style. Only explode: true is supported.",
-                        specPath));
-                    continue;
-                }
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Warning,
+                    DiagnosticCodes.UnsupportedParameterStyleCombination,
+                    $"Parameter '{param.Name}' uses unsupported style '{param.Style}'. Parameter skipped.",
+                    specPath));
+                continue;
             }
 
-            var schema = ResolveParameterSchema(param.Schema, param.Name ?? "", specPath);
+            if (IsUnsupportedStyleCombination(style, explode))
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Warning,
+                    DiagnosticCodes.UnsupportedParameterStyleCombination,
+                    $"Parameter '{param.Name}' uses unsupported style/explode combination ({style}/{(explode ? "explode" : "no-explode")}). Parameter skipped.",
+                    specPath));
+                continue;
+            }
+
+            var isDeepObject = style == Model.ParameterStyle.DeepObject;
+            var schema = ResolveParameterSchema(param.Schema, param.Name ?? "", specPath, allowInlineObject: isDeepObject);
             if (schema is null)
                 continue;
 
@@ -212,13 +276,15 @@ public class OperationTransformer
                 Schema = schema,
                 IsRequired = isRequired,
                 Description = param.Description,
+                Style = style,
+                Explode = explode,
             });
         }
 
         return (result, diagnostics.Count > 0 ? diagnostics : null);
     }
 
-    private ApiSchema? ResolveParameterSchema(IOpenApiSchema? schema, string paramName, string specPath)
+    private ApiSchema? ResolveParameterSchema(IOpenApiSchema? schema, string paramName, string specPath, bool allowInlineObject = false)
     {
         if (schema is null)
             return null;
@@ -239,6 +305,9 @@ public class OperationTransformer
 
         if (GetBaseType(resolved) == JsonSchemaType.Object && resolved.Properties is { Count: > 0 })
         {
+            if (allowInlineObject)
+                return BuildInlineObjectSchema(resolved, paramName, specPath);
+
             _diagnostics.Add(new Diagnostic(
                 DiagnosticSeverity.Warning,
                 DiagnosticCodes.UnsupportedInlineSchema,
@@ -272,6 +341,93 @@ public class OperationTransformer
         };
     }
 
+    private static readonly string[] RequestContentTypePreference =
+    [
+        "application/json",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+        "application/octet-stream",
+        "text/plain",
+    ];
+
+    private static ContentKind? MapContentKind(string mediaType)
+    {
+        if (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase)
+            || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase))
+            return ContentKind.Json;
+        if (mediaType.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+            return ContentKind.FormUrlEncoded;
+        if (mediaType.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+            return ContentKind.MultipartFormData;
+        if (mediaType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)
+            || mediaType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return ContentKind.OctetStream;
+        if (mediaType.Equals("text/plain", StringComparison.OrdinalIgnoreCase))
+            return ContentKind.PlainText;
+        return null;
+    }
+
+    private (string MediaType, ContentKind Kind, IOpenApiMediaType Value)? SelectContentType(
+        IDictionary<string, IOpenApiMediaType> content,
+        string[] preferenceOrder,
+        string specPath)
+    {
+        var selected = (string?)null;
+        ContentKind? selectedKind = null;
+        IOpenApiMediaType? selectedValue = null;
+        var skipped = new List<string>();
+
+        foreach (var preferred in preferenceOrder)
+        {
+            var match = content.FirstOrDefault(c =>
+                c.Key.Equals(preferred, StringComparison.OrdinalIgnoreCase)
+                || (preferred == "application/json" && c.Key.EndsWith("+json", StringComparison.OrdinalIgnoreCase)));
+            if (match.Value is not null && selected is null)
+            {
+                selected = match.Key;
+                selectedKind = MapContentKind(match.Key);
+                selectedValue = match.Value;
+            }
+            else if (match.Value is not null)
+            {
+                skipped.Add(match.Key);
+            }
+        }
+
+        if (selected is null)
+        {
+            foreach (var (key, value) in content)
+            {
+                var kind = MapContentKind(key);
+                if (kind is not null && selected is null)
+                {
+                    selected = key;
+                    selectedKind = kind;
+                    selectedValue = value;
+                }
+                else if (kind is not null)
+                {
+                    skipped.Add(key);
+                }
+            }
+        }
+
+        if (selected is not null && skipped.Count > 0)
+        {
+            _diagnostics.Add(new Diagnostic(
+                DiagnosticSeverity.Info,
+                DiagnosticCodes.ContentTypeNegotiated,
+                $"Multiple content types available [{string.Join(", ", content.Keys)}]. Selected {selected}.",
+                specPath));
+        }
+
+        if (selected is not null && selectedKind is not null && selectedValue is not null)
+            return (selected, selectedKind.Value, selectedValue);
+
+        return null;
+    }
+
     private (ApiRequestBody? Body, bool SkipOperation) TransformRequestBody(IOpenApiRequestBody? requestBody, string specPath)
     {
         if (requestBody is null)
@@ -284,28 +440,39 @@ public class OperationTransformer
             return (null, false);
         }
 
-        var jsonContent = requestBody.Content
-            .FirstOrDefault(c => c.Key.Equals("application/json", StringComparison.OrdinalIgnoreCase));
+        var pick = SelectContentType(requestBody.Content, RequestContentTypePreference, specPath);
 
-        if (jsonContent.Value is null)
+        if (pick is null)
         {
-            if (requestBody.Content.Count > 0)
-            {
-                var contentType = requestBody.Content.First().Key;
-                _diagnostics.Add(new Diagnostic(
-                    DiagnosticSeverity.Warning,
-                    DiagnosticCodes.UnsupportedContentType,
-                    $"Request body content type '{contentType}' is not supported. Only application/json is supported.",
-                    specPath));
-            }
+            var contentType = requestBody.Content.First().Key;
+            _diagnostics.Add(new Diagnostic(
+                DiagnosticSeverity.Warning,
+                DiagnosticCodes.UnsupportedContentType,
+                $"Request body content type '{contentType}' is not supported.",
+                specPath));
 
             if (requestBody.Required)
                 return (null, true);
-
             return (null, false);
         }
 
-        var schema = ResolveBodySchema(jsonContent.Value.Schema, specPath);
+        var (mediaType, contentKind, mediaTypeObj) = pick.Value;
+
+        return contentKind switch
+        {
+            ContentKind.Json => TransformJsonRequestBody(mediaTypeObj, requestBody.Required, mediaType, specPath),
+            ContentKind.FormUrlEncoded => TransformFormRequestBody(mediaTypeObj, requestBody.Required, mediaType, specPath),
+            ContentKind.MultipartFormData => TransformMultipartRequestBody(mediaTypeObj, requestBody.Required, mediaType, specPath),
+            ContentKind.OctetStream => TransformOctetStreamRequestBody(requestBody.Required, mediaType),
+            ContentKind.PlainText => TransformPlainTextRequestBody(requestBody.Required, mediaType),
+            _ => (null, false),
+        };
+    }
+
+    private (ApiRequestBody? Body, bool SkipOperation) TransformJsonRequestBody(
+        IOpenApiMediaType mediaTypeObj, bool isRequired, string mediaType, string specPath)
+    {
+        var schema = ResolveBodySchema(mediaTypeObj.Schema, specPath);
         if (schema is null)
         {
             _diagnostics.Add(new Diagnostic(
@@ -319,9 +486,214 @@ public class OperationTransformer
         return (new ApiRequestBody
         {
             Schema = schema,
-            IsRequired = requestBody.Required,
-            ContentType = "application/json",
+            IsRequired = isRequired,
+            ContentKind = ContentKind.Json,
+            MediaType = mediaType,
         }, false);
+    }
+
+    private (ApiRequestBody? Body, bool SkipOperation) TransformFormRequestBody(
+        IOpenApiMediaType mediaTypeObj, bool isRequired, string mediaType, string specPath)
+    {
+        if (mediaTypeObj.Schema is null)
+            return (null, false);
+
+        var resolved = ResolveRef(mediaTypeObj.Schema);
+
+        if (resolved.Properties is null or { Count: 0 })
+            return (null, false);
+
+        foreach (var (propName, propSchema) in resolved.Properties)
+        {
+            var resolvedProp = ResolveRef(propSchema);
+            if (_schemaMap.ContainsKey(resolvedProp) ||
+                (GetBaseType(resolvedProp) == JsonSchemaType.Object && resolvedProp.Properties is { Count: > 0 }))
+            {
+                _diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Warning,
+                    DiagnosticCodes.UnsupportedInlineSchema,
+                    $"Form-encoded property '{propName}' references a complex object. Only scalar types are supported in form bodies.",
+                    specPath));
+                if (isRequired)
+                    return (null, true);
+                return (null, false);
+            }
+        }
+
+        var formSchema = BuildInlineObjectSchema(resolved, "formBody", specPath);
+
+        return (new ApiRequestBody
+        {
+            Schema = formSchema,
+            IsRequired = isRequired,
+            ContentKind = ContentKind.FormUrlEncoded,
+            MediaType = mediaType,
+        }, false);
+    }
+
+    private (ApiRequestBody? Body, bool SkipOperation) TransformMultipartRequestBody(
+        IOpenApiMediaType mediaTypeObj, bool isRequired, string mediaType, string specPath)
+    {
+        if (mediaTypeObj.Schema is null)
+            return (null, false);
+
+        var resolved = ResolveRef(mediaTypeObj.Schema);
+
+        if (resolved.Properties is null or { Count: 0 })
+            return (null, false);
+
+        var multipartSchema = BuildInlineObjectSchema(resolved, "multipartBody", specPath, isBinaryContext: true);
+
+        IReadOnlyDictionary<string, MultipartEncoding>? encodings = null;
+        if (mediaTypeObj.Encoding is { Count: > 0 })
+        {
+            var dict = new Dictionary<string, MultipartEncoding>(StringComparer.Ordinal);
+            foreach (var (propName, enc) in mediaTypeObj.Encoding)
+            {
+                if (resolved.Properties?.ContainsKey(propName) != true)
+                {
+                    _diagnostics.Add(new Diagnostic(
+                        DiagnosticSeverity.Info,
+                        DiagnosticCodes.UnknownEncodingProperty,
+                        $"Multipart encoding references unknown property '{propName}'.",
+                        specPath));
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(enc.ContentType))
+                    dict[propName] = new MultipartEncoding { ContentType = enc.ContentType! };
+            }
+            if (dict.Count > 0)
+                encodings = dict;
+        }
+
+        return (new ApiRequestBody
+        {
+            Schema = multipartSchema,
+            IsRequired = isRequired,
+            ContentKind = ContentKind.MultipartFormData,
+            MediaType = mediaType,
+            PropertyEncodings = encodings,
+        }, false);
+    }
+
+    private static (ApiRequestBody? Body, bool SkipOperation) TransformOctetStreamRequestBody(bool isRequired, string mediaType)
+    {
+        var schema = new ApiSchema
+        {
+            Name = "body",
+            OriginalName = "body",
+            Kind = SchemaKind.Primitive,
+            PrimitiveType = PrimitiveType.Stream,
+        };
+
+        return (new ApiRequestBody
+        {
+            Schema = schema,
+            IsRequired = isRequired,
+            ContentKind = ContentKind.OctetStream,
+            MediaType = mediaType,
+        }, false);
+    }
+
+    private static (ApiRequestBody? Body, bool SkipOperation) TransformPlainTextRequestBody(bool isRequired, string mediaType)
+    {
+        var schema = new ApiSchema
+        {
+            Name = "body",
+            OriginalName = "body",
+            Kind = SchemaKind.Primitive,
+            PrimitiveType = PrimitiveType.String,
+        };
+
+        return (new ApiRequestBody
+        {
+            Schema = schema,
+            IsRequired = isRequired,
+            ContentKind = ContentKind.PlainText,
+            MediaType = mediaType,
+        }, false);
+    }
+
+    private ApiSchema BuildInlineObjectSchema(IOpenApiSchema resolved, string name, string specPath, bool isBinaryContext = false)
+    {
+        var requiredSet = resolved.Required;
+        var properties = new List<ApiProperty>();
+
+        if (resolved.Properties is null)
+            return new ApiSchema
+            {
+                Name = name,
+                OriginalName = name,
+                Kind = SchemaKind.Object,
+                Properties = [],
+                Source = specPath,
+            };
+
+        foreach (var (propName, propSchema) in resolved.Properties)
+        {
+            var resolvedProp = ResolveRef(propSchema);
+            ApiSchema propApiSchema;
+
+            if (_schemaMap.TryGetValue(resolvedProp, out var mapped))
+            {
+                propApiSchema = mapped;
+            }
+            else if (isBinaryContext && GetBaseType(resolvedProp) == JsonSchemaType.String
+                     && resolvedProp.Format is "binary")
+            {
+                propApiSchema = new ApiSchema
+                {
+                    Name = propName,
+                    OriginalName = propName,
+                    Kind = SchemaKind.Primitive,
+                    PrimitiveType = PrimitiveType.Stream,
+                    Source = specPath,
+                };
+            }
+            else if (GetBaseType(resolvedProp) == JsonSchemaType.Array)
+            {
+                var itemSchema = resolvedProp.Items != null ? ResolveParameterSchema(resolvedProp.Items, propName, specPath) : null;
+                propApiSchema = new ApiSchema
+                {
+                    Name = propName,
+                    OriginalName = propName,
+                    Kind = SchemaKind.Array,
+                    ArrayItemSchema = itemSchema,
+                    Source = specPath,
+                };
+            }
+            else
+            {
+                var prim = MapInlinePrimitive(resolvedProp);
+                propApiSchema = new ApiSchema
+                {
+                    Name = propName,
+                    OriginalName = propName,
+                    Kind = SchemaKind.Primitive,
+                    PrimitiveType = prim ?? PrimitiveType.String,
+                    IsNullable = IsNullable(resolvedProp),
+                    Source = specPath,
+                };
+            }
+
+            properties.Add(new ApiProperty
+            {
+                Name = propName,
+                CSharpName = NamingHelper.ToPascalCase(propName),
+                Schema = propApiSchema,
+                IsRequired = requiredSet?.Contains(propName) == true,
+            });
+        }
+
+        return new ApiSchema
+        {
+            Name = name,
+            OriginalName = name,
+            Kind = SchemaKind.Object,
+            Properties = properties,
+            Source = specPath,
+        };
     }
 
     private ApiSchema? ResolveBodySchema(IOpenApiSchema? schema, string specPath)
@@ -375,6 +747,14 @@ public class OperationTransformer
         return null;
     }
 
+    private static readonly string[] ResponseContentTypePreference =
+    [
+        "application/json",
+        "application/octet-stream",
+        "application/pdf",
+        "text/plain",
+    ];
+
     private (ApiResponse? Response, bool SkipOperation) TransformSuccessResponse(OpenApiResponses? responses, string specPath)
     {
         if (responses is null || responses.Count == 0)
@@ -397,41 +777,94 @@ public class OperationTransformer
                 return (new ApiResponse
                 {
                     StatusCode = statusCode,
-                    ContentType = string.Empty,
                     Schema = null,
                 }, false);
             }
 
-            var jsonContent = response.Content
-                .FirstOrDefault(c => c.Key.Equals("application/json", StringComparison.OrdinalIgnoreCase));
-
-            if (jsonContent.Value is null)
-                continue;
-
-            var schema = ResolveResponseSchema(jsonContent.Value.Schema, specPath);
-            if (schema is null && jsonContent.Value.Schema is not null)
+            var pick = SelectContentType(response.Content, ResponseContentTypePreference, specPath);
+            if (pick is null)
             {
+                var unsupportedType = response.Content.First().Key;
                 _diagnostics.Add(new Diagnostic(
                     DiagnosticSeverity.Warning,
-                    DiagnosticCodes.UnsupportedInlineSchema,
-                    $"Response for status {statusCode} uses an inline complex schema. Only $ref and inline array of $ref are supported.",
+                    DiagnosticCodes.UnsupportedContentType,
+                    $"Response content type '{unsupportedType}' is not supported.",
                     specPath));
-                return (null, true);
+                continue;
             }
 
-            return (new ApiResponse
+            var (mediaType, contentKind, mediaTypeObj) = pick.Value;
+
+            switch (contentKind)
             {
-                StatusCode = statusCode,
-                ContentType = "application/json",
-                Schema = schema,
-            }, false);
+                case ContentKind.Json:
+                {
+                    var schema = ResolveResponseSchema(mediaTypeObj.Schema, specPath);
+                    if (schema is null && mediaTypeObj.Schema is not null)
+                    {
+                        _diagnostics.Add(new Diagnostic(
+                            DiagnosticSeverity.Warning,
+                            DiagnosticCodes.UnsupportedInlineSchema,
+                            $"Response for status {statusCode} uses an inline complex schema. Only $ref and inline array of $ref are supported.",
+                            specPath));
+                        return (null, true);
+                    }
+
+                    return (new ApiResponse
+                    {
+                        StatusCode = statusCode,
+                        ContentKind = ContentKind.Json,
+                        MediaType = mediaType,
+                        Schema = schema,
+                    }, false);
+                }
+                case ContentKind.OctetStream:
+                {
+                    var streamSchema = new ApiSchema
+                    {
+                        Name = "response",
+                        OriginalName = "response",
+                        Kind = SchemaKind.Primitive,
+                        PrimitiveType = PrimitiveType.Stream,
+                        Source = specPath,
+                    };
+
+                    return (new ApiResponse
+                    {
+                        StatusCode = statusCode,
+                        ContentKind = ContentKind.OctetStream,
+                        MediaType = mediaType,
+                        Schema = streamSchema,
+                    }, false);
+                }
+                case ContentKind.PlainText:
+                {
+                    var stringSchema = new ApiSchema
+                    {
+                        Name = "response",
+                        OriginalName = "response",
+                        Kind = SchemaKind.Primitive,
+                        PrimitiveType = PrimitiveType.String,
+                        Source = specPath,
+                    };
+
+                    return (new ApiResponse
+                    {
+                        StatusCode = statusCode,
+                        ContentKind = ContentKind.PlainText,
+                        MediaType = mediaType,
+                        Schema = stringSchema,
+                    }, false);
+                }
+                default:
+                    continue;
+            }
         }
 
         var firstCode = int.Parse(successResponses.First().Key);
         return (new ApiResponse
         {
             StatusCode = firstCode,
-            ContentType = string.Empty,
             Schema = null,
         }, false);
     }
@@ -506,7 +939,6 @@ public class OperationTransformer
                         $"Method name '{op.CSharpMethodName}' collides within tag '{op.Tag}'. Renamed to '{newName}'.",
                         $"#/paths/{op.Path}"));
 
-                    var mutable = op;
                     seen[op.CSharpMethodName] = count + 1;
                     var index = operations.IndexOf(op);
                     operations[index] = new ApiOperation

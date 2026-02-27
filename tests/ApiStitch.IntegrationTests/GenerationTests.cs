@@ -332,6 +332,95 @@ public class GenerationTests
         Assert.Contains("partial record Animal", animalFile.Content);
     }
 
+    [Fact]
+    public void AdvancedHttp_GeneratesAndCompiles()
+    {
+        var result = Generate("advanced-http.yaml");
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var (success, compileDiags, _) = RoslynCompilationHelper.Compile(result.Files, excludeJsonContext: true);
+        Assert.True(success, FormatDiagnostics(compileDiags));
+
+        Assert.Contains(result.Files, f => f.RelativePath == "FileResponse.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "ApiException.cs");
+    }
+
+    [Fact]
+    public void AdvancedHttp_ContentNegotiationSelectsJson()
+    {
+        var result = Generate("advanced-http.yaml");
+        Assert.Contains(result.Diagnostics, d => d.Code == "AS409");
+    }
+
+    [Fact]
+    public void AdvancedHttp_FormEncodedEndpoint()
+    {
+        var result = Generate("advanced-http.yaml");
+        var authClient = result.Files.FirstOrDefault(f => f.RelativePath.Contains("AuthClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.NotNull(authClient);
+        Assert.Contains("FormUrlEncodedContent", authClient.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_MultipartEndpoint()
+    {
+        var result = Generate("advanced-http.yaml");
+        var filesClient = result.Files.FirstOrDefault(f => f.RelativePath.Contains("FilesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.NotNull(filesClient);
+        Assert.Contains("MultipartFormDataContent", filesClient.Content);
+        Assert.Contains("StreamContent", filesClient.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_StreamResponse()
+    {
+        var result = Generate("advanced-http.yaml");
+        var filesClient = result.Files.FirstOrDefault(f => f.RelativePath.Contains("FilesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.NotNull(filesClient);
+        Assert.Contains("FileResponse.CreateAsync", filesClient.Content);
+        Assert.Contains("HttpCompletionOption.ResponseHeadersRead", filesClient.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_PlainTextRequestAndResponse()
+    {
+        var result = Generate("advanced-http.yaml");
+        var notesClient = result.Files.FirstOrDefault(f => f.RelativePath.Contains("NotesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.NotNull(notesClient);
+        Assert.Contains("new StringContent(body, Encoding.UTF8, \"text/plain\")", notesClient.Content);
+        Assert.Contains("ReadAsStringAsync", notesClient.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_DeepObjectAndCommaSeparated()
+    {
+        var result = Generate("advanced-http.yaml");
+        var itemsClient = result.Files.FirstOrDefault(f => f.RelativePath.Contains("ItemsClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.NotNull(itemsClient);
+        Assert.Contains("filter[status]", itemsClient.Content);
+        Assert.Contains("string.Join(\",\"", itemsClient.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_ProblemDetailsInEnsureSuccess()
+    {
+        var result = Generate("advanced-http.yaml");
+        var anyImpl = result.Files.FirstOrDefault(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I") && !f.RelativePath.Contains("Options") && !f.RelativePath.Contains("Extensions") && !f.RelativePath.Contains("Json"));
+        Assert.NotNull(anyImpl);
+        Assert.Contains("Deserialize<ProblemDetails>", anyImpl.Content);
+    }
+
+    [Fact]
+    public void AdvancedHttp_ExistingTestsStillPass()
+    {
+        var petstoreResult = Generate("petstore.yaml");
+        Assert.DoesNotContain(petstoreResult.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        var (success, compileDiags, _) = RoslynCompilationHelper.Compile(petstoreResult.Files, excludeJsonContext: true);
+        Assert.True(success, FormatDiagnostics(compileDiags));
+    }
+
     private static string FormatDiagnostics(IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> diagnostics) =>
         $"Compilation failed:\n{string.Join("\n", diagnostics.Select(d => $"  {d.Location}: {d.GetMessage()}"))}";
 }

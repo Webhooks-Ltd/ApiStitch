@@ -11,6 +11,12 @@ public class ApiRequestBody
     /// <summary>Whether the request body is required.</summary>
     public bool IsRequired { get; init; }
 
-    /// <summary>Content type (e.g. "application/json").</summary>
-    public required string ContentType { get; init; }
+    /// <summary>Content kind category for this request body.</summary>
+    public required ContentKind ContentKind { get; init; }
+
+    /// <summary>Original media type string (e.g. "application/json").</summary>
+    public required string MediaType { get; init; }
+
+    /// <summary>Per-property encoding metadata for multipart request bodies.</summary>
+    public IReadOnlyDictionary<string, MultipartEncoding>? PropertyEncodings { get; init; }
 }
