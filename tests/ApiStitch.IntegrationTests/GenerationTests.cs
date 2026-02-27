@@ -333,6 +333,60 @@ public class GenerationTests
     }
 
     [Fact]
+    public void TypeReuse_ExternalProblemDetails_NotEmitted_FqnUsedInClients()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-problem-details.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["Microsoft.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "HttpValidationProblemDetails.cs");
+
+        var exceptionFile = result.Files.First(f => f.RelativePath == "ApiException.cs");
+        Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails?", exceptionFile.Content);
+
+        var implFile = result.Files.First(f =>
+            f.RelativePath.EndsWith("Client.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("Deserialize<Microsoft.AspNetCore.Mvc.ProblemDetails>", implFile.Content);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
+        Assert.Contains("Microsoft.AspNetCore.Http.HttpValidationProblemDetails", contextFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_NonExternalProblemDetails_EmittedNormally()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-problem-details.yaml"),
+            Namespace = "Generated.Models",
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.Contains(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+
+        var exceptionFile = result.Files.First(f => f.RelativePath == "ApiException.cs");
+        Assert.Contains("ProblemDetails? problem", exceptionFile.Content);
+        Assert.DoesNotContain("Microsoft.AspNetCore.Mvc.ProblemDetails", exceptionFile.Content);
+
+        var implFile = result.Files.First(f =>
+            f.RelativePath.EndsWith("Client.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("Deserialize<ProblemDetails>", implFile.Content);
+    }
+
+    [Fact]
     public void AdvancedHttp_GeneratesAndCompiles()
     {
         var result = Generate("advanced-http.yaml");

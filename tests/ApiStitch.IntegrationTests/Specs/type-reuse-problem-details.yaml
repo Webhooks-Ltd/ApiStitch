@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: ProblemDetails Reuse Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      operationId: listItems
+      tags: [Items]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "422":
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/HttpValidationProblemDetails'
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+      required: [id, name]
+    ProblemDetails:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.Mvc.ProblemDetails
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+    HttpValidationProblemDetails:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.Http.HttpValidationProblemDetails
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string

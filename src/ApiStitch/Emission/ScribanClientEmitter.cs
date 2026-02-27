@@ -60,6 +60,11 @@ public class ScribanClientEmitter : IClientEmitter
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
 
+        var problemDetailsSchema = spec.Schemas.FirstOrDefault(s => s.Name == "ProblemDetails");
+        var problemDetailsTypeName = problemDetailsSchema is { IsExternal: true }
+            ? problemDetailsSchema.CSharpTypeName!
+            : "ProblemDetails";
+
         var queryEnums = new HashSet<string>(StringComparer.Ordinal);
         var tagClients = new List<object>();
 
@@ -74,13 +79,14 @@ public class ScribanClientEmitter : IClientEmitter
             var opModels = BuildOperationModels(operations, queryEnums);
 
             files.Add(EmitInterface(ns, interfaceName, opModels));
-            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, opModels));
+            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, opModels));
 
             tagClients.Add(new { interface_name = interfaceName, class_name = className });
         }
 
-        files.Add(EmitProblemDetails(ns));
-        files.Add(EmitApiException(ns));
+        if (problemDetailsSchema is not { IsExternal: true })
+            files.Add(EmitProblemDetails(ns));
+        files.Add(EmitApiException(ns, problemDetailsTypeName));
         files.Add(EmitClientOptions(ns, clientName, optionsClassName));
         files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName));
         files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients));
@@ -518,7 +524,7 @@ public class ScribanClientEmitter : IClientEmitter
 
     private GeneratedFile EmitImplementation(
         string ns, string interfaceName, string className, string clientName,
-        string jsonOptionsName, List<object> operations)
+        string jsonOptionsName, string problemDetailsTypeName, List<object> operations)
     {
         var hasQueryMethods = operations.Any(o =>
         {
@@ -534,14 +540,16 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("json_options_name", jsonOptionsName);
         model.Add("operations", operations);
         model.Add("has_query_methods", hasQueryMethods);
+        model.Add("problem_details_type", problemDetailsTypeName);
 
         return RenderTemplate(_implementationTemplate, $"{className}.cs", model);
     }
 
-    private GeneratedFile EmitApiException(string ns)
+    private GeneratedFile EmitApiException(string ns, string problemDetailsTypeName)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
+        model.Add("problem_details_type", problemDetailsTypeName);
 
         return RenderTemplate(_exceptionTemplate, "ApiException.cs", model);
     }

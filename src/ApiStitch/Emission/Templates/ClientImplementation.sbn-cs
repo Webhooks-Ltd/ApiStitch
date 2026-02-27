@@ -199,7 +199,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             return;
 
         string? body = null;
-        ProblemDetails? problem = null;
+        {{ problem_details_type }}? problem = null;
 
         if (response.Content.Headers.ContentLength is not 0)
         {
@@ -214,7 +214,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             {
                 try
                 {
-                    problem = JsonSerializer.Deserialize<ProblemDetails>(body, _jsonOptions);
+                    problem = JsonSerializer.Deserialize<{{ problem_details_type }}>(body, _jsonOptions);
                 }
                 catch (JsonException)
                 {

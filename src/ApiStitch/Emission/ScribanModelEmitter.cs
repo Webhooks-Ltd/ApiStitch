@@ -50,7 +50,7 @@ public class ScribanModelEmitter : IModelEmitter
             }
         }
 
-        if (spec.Operations.Count > 0)
+        if (spec.Operations.Count > 0 && !spec.Schemas.Any(s => s.Name == "ProblemDetails"))
             typeNames.Add("ProblemDetails");
 
         files.Add(EmitJsonContext(typeNames, spec, config));

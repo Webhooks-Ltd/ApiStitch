@@ -20,7 +20,7 @@ public sealed class ApiException : HttpRequestException
         HttpStatusCode statusCode,
         string? responseBody,
         HttpResponseHeaders? responseHeaders,
-        ProblemDetails? problem = null)
+        {{ problem_details_type }}? problem = null)
         : base($"HTTP {(int)statusCode} ({statusCode})", inner: null, statusCode)
     {
         ResponseBody = responseBody;
@@ -41,5 +41,5 @@ public sealed class ApiException : HttpRequestException
     /// <summary>
     /// Structured problem details from the response, if available.
     /// </summary>
-    public ProblemDetails? Problem { get; }
+    public {{ problem_details_type }}? Problem { get; }
 }
