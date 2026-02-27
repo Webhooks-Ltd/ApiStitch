@@ -64,7 +64,12 @@ public static class ProjectSpecExtractor
 
         var extractResult = await RunAsync("dotnet", args.ToString(), projectDir, cancellationToken);
         if (extractResult.ExitCode != 0)
-            return (null, $"Failed to extract OpenAPI spec: {extractResult.StdErr.Trim()}");
+        {
+            var detail = !string.IsNullOrWhiteSpace(extractResult.StdErr)
+                ? extractResult.StdErr.Trim()
+                : extractResult.StdOut.Trim();
+            return (null, $"Failed to extract OpenAPI spec (exit code {extractResult.ExitCode}): {detail}");
+        }
 
         if (!File.Exists(fileList))
             return (null, "OpenAPI spec extraction produced no output. Ensure the project has OpenAPI document generation enabled.");
