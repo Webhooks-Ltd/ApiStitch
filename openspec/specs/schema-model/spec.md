@@ -1,9 +1,7 @@
 ## Purpose
 
 Semantic model for the API surface. Transforms OpenAPI component schemas into a language-agnostic representation covering objects, arrays, primitives, enums, allOf composition (flattening and detected inheritance), nullable/required modifiers, circular reference detection, inline schema hoisting, and PascalCase naming.
-
 ## Requirements
-
 ### Requirement: Transform object schemas to ApiSchema with Kind Object
 
 The system SHALL transform OpenAPI object schemas (type: object with properties) into ApiSchema instances with Kind = Object, populating Properties with an ApiProperty for each declared property.
@@ -143,7 +141,7 @@ The system SHALL convert all OpenAPI schema names to PascalCase for C# type name
 
 ### Requirement: Map OpenAPI primitive types and formats to semantic model primitives
 
-The system SHALL map OpenAPI `type` + `format` combinations to ApiSchema PrimitiveType values according to the type mapping table in the proposal.
+The system SHALL map OpenAPI `type` + `format` combinations to ApiSchema PrimitiveType values according to the type mapping table in the proposal. When `format: binary` appears inside a multipart or octet-stream content type context, the system SHALL map to `PrimitiveType.Stream` instead of `PrimitiveType.ByteArray`.
 
 #### Scenario: string with date-time format
 - **WHEN** a schema has `type: string, format: date-time`
@@ -177,9 +175,17 @@ The system SHALL map OpenAPI `type` + `format` combinations to ApiSchema Primiti
 - **WHEN** a schema has `type: string, format: byte`
 - **THEN** the ApiSchema has Kind = Primitive and PrimitiveType = ByteArray
 
-#### Scenario: string with binary format
-- **WHEN** a schema has `type: string, format: binary`
+#### Scenario: string with binary format in JSON context
+- **WHEN** a schema has `type: string, format: binary` and appears inside a JSON request body or JSON response
 - **THEN** the ApiSchema has Kind = Primitive and PrimitiveType = ByteArray
+
+#### Scenario: string with binary format in multipart context
+- **WHEN** a schema property has `type: string, format: binary` and appears inside a `multipart/form-data` request body
+- **THEN** the ApiSchema has Kind = Primitive and PrimitiveType = Stream
+
+#### Scenario: string with binary format in octet-stream context
+- **WHEN** a schema has `type: string, format: binary` and appears as the schema of an `application/octet-stream` request body
+- **THEN** the ApiSchema has Kind = Primitive and PrimitiveType = Stream
 
 #### Scenario: string with no format
 - **WHEN** a schema has `type: string` with no format
@@ -216,7 +222,6 @@ The system SHALL map OpenAPI `type` + `format` combinations to ApiSchema Primiti
 #### Scenario: string with unknown format
 - **WHEN** a schema has `type: string, format: custom-thing`
 - **THEN** the ApiSchema has Kind = Primitive and PrimitiveType = String
-- **THEN** a warning diagnostic with code `AS204` is emitted indicating the unknown format was treated as string
 
 ### Requirement: Capture deprecation flags from OpenAPI schemas and properties
 
@@ -319,8 +324,103 @@ The system SHALL detect cycles of any length, not just two-node or self-referenc
 
 ### Requirement: Stub operation, parameter, and response types in the semantic model
 
-The system SHALL include empty placeholder types (ApiOperation, ApiParameter, ApiResponse) in the semantic model with an Operations collection on ApiSpecification. These types SHALL be unpopulated in this change.
+The system SHALL include fully populated types (ApiOperation, ApiParameter, ApiResponse, ApiRequestBody) in the semantic model. ApiSpecification.Operations SHALL contain parsed operations from the OpenAPI document's paths. ApiSpecification SHALL be a record class to support `with` expressions for immutable updates.
 
-#### Scenario: Semantic model includes empty operations list
+#### Scenario: ApiSpecification is a record class
 - **WHEN** a spec is transformed
-- **THEN** ApiSpecification.Operations is an empty IReadOnlyList<ApiOperation> (not null)
+- **THEN** ApiSpecification is a `record class` supporting `with` expressions
+- **THEN** ApiSpecification.Operations is `IReadOnlyList<ApiOperation>` initialized to `[]`
+
+#### Scenario: Operations populated after OperationTransformer runs
+- **WHEN** OperationTransformer completes
+- **THEN** the pipeline creates a new ApiSpecification instance with Operations populated using `with { Operations = operations }`
+
+#### Scenario: ApiOperation has full properties
+- **WHEN** an operation is transformed
+- **THEN** ApiOperation has properties: OperationId, Path, HttpMethod (ApiHttpMethod enum), Tag, CSharpMethodName, Parameters, RequestBody, SuccessResponse, IsDeprecated, Description, Diagnostics (mutable `List<Diagnostic>` — deliberately mutable so the transformer can accumulate diagnostics during parsing)
+
+#### Scenario: ApiHttpMethod is a custom enum
+- **WHEN** the semantic model defines HTTP methods
+- **THEN** it uses `ApiHttpMethod { Get, Post, Put, Delete, Patch, Head, Options }` (not System.Net.Http.HttpMethod)
+
+#### Scenario: ApiParameter has full properties
+- **WHEN** a parameter is transformed
+- **THEN** ApiParameter has properties: Name, CSharpName, Location (ParameterLocation enum), Schema, IsRequired, Description
+
+#### Scenario: ParameterLocation is an enum
+- **WHEN** a parameter location is set
+- **THEN** ParameterLocation is `enum { Path, Query, Header }` (cookie is excluded — emits diagnostic)
+
+#### Scenario: ApiRequestBody is a separate type
+- **WHEN** a request body is parsed
+- **THEN** ApiRequestBody has properties: Schema, IsRequired, ContentType
+
+#### Scenario: ApiResponse has full properties
+- **WHEN** a response is parsed
+- **THEN** ApiResponse has properties: Schema (nullable), StatusCode, ContentType, HasBody (computed from Schema is not null)
+
+### Requirement: ApiSchema includes VendorTypeHint field
+`ApiSchema` SHALL include a `string? VendorTypeHint` property that stores the raw value of the `x-apistitch-type` vendor extension read during schema transformation. This field SHALL be set by `SchemaTransformer` and consumed by `ExternalTypeResolver`.
+
+#### Scenario: VendorTypeHint populated from extension
+- **WHEN** a component schema has `"x-apistitch-type": "SampleApi.Models.Pet"`
+- **THEN** `ApiSchema.VendorTypeHint` is `"SampleApi.Models.Pet"`
+
+#### Scenario: VendorTypeHint null when no extension
+- **WHEN** a component schema has no `x-apistitch-type` extension
+- **THEN** `ApiSchema.VendorTypeHint` is `null`
+
+### Requirement: ApiSchema includes ExternalClrTypeName field and computed IsExternal
+`ApiSchema` SHALL include a `string? ExternalClrTypeName` property set by `ExternalTypeResolver` after applying exclusion logic and nested type normalisation. `ApiSchema` SHALL include a computed `bool IsExternal` property that returns `ExternalClrTypeName is not null`.
+
+#### Scenario: ExternalClrTypeName set after resolution
+- **WHEN** `ExternalTypeResolver` resolves a vendor type hint of `"SampleApi.Models.Pet"` with no exclusions
+- **THEN** `ApiSchema.ExternalClrTypeName` is `"SampleApi.Models.Pet"` and `IsExternal` is `true`
+
+#### Scenario: ExternalClrTypeName null when excluded
+- **WHEN** `ExternalTypeResolver` finds a vendor type hint that is excluded by configuration
+- **THEN** `ApiSchema.ExternalClrTypeName` remains `null` and `IsExternal` is `false`
+
+#### Scenario: ExternalClrTypeName null when no vendor hint
+- **WHEN** a schema has no `VendorTypeHint`
+- **THEN** `ApiSchema.ExternalClrTypeName` is `null` and `IsExternal` is `false`
+
+### Requirement: Setting external fields does not change structural properties
+Setting `ExternalClrTypeName` and `IsExternal` on an `ApiSchema` SHALL NOT change the schema's `Kind`, `Properties`, `EnumValues`, `BaseSchema`, or any other structural field. The schema retains its full semantic model structure.
+
+#### Scenario: External object schema retains Kind and Properties
+- **WHEN** an object schema with 3 properties is marked as external
+- **THEN** `Kind` remains `SchemaKind.Object` and `Properties` still contains all 3 properties
+
+#### Scenario: External enum schema retains Kind and EnumValues
+- **WHEN** an enum schema with members `Active`, `Inactive`, `Pending` is marked as external
+- **THEN** `Kind` remains `SchemaKind.Enum` and `EnumValues` still contains all 3 members
+
+### Requirement: SchemaTransformer exposes schema map
+
+SchemaTransformer.Transform() SHALL return the internal schema map as `IReadOnlyDictionary<OpenApiSchema, ApiSchema>` alongside the ApiSpecification and diagnostics, enabling OperationTransformer to resolve `$ref` schemas.
+
+#### Scenario: Transform return type includes schema map
+- **WHEN** SchemaTransformer.Transform() completes
+- **THEN** it returns `(ApiSpecification, IReadOnlyDictionary<OpenApiSchema, ApiSchema>, IReadOnlyList<Diagnostic>)`
+
+#### Scenario: Schema map contains all processed schemas
+- **WHEN** a spec with 5 component schemas is transformed
+- **THEN** the schema map contains entries for all 5 OpenApiSchema → ApiSchema mappings
+
+### Requirement: PrimitiveType enum includes Stream variant
+
+The `PrimitiveType` enum SHALL include a `Stream` variant representing `System.IO.Stream` for binary body parameters in multipart and octet-stream contexts. `CSharpTypeMapper.MapPrimitive` SHALL map `PrimitiveType.Stream` to `"Stream"`. `CSharpTypeMapper.IsValueType` SHALL return `false` for `PrimitiveType.Stream`.
+
+#### Scenario: Stream maps to C# Stream type
+- **WHEN** `CSharpTypeMapper.MapPrimitive` is called with `PrimitiveType.Stream`
+- **THEN** the result is `"Stream"`
+
+#### Scenario: Stream is not a value type
+- **WHEN** `CSharpTypeMapper.IsValueType` is called with `PrimitiveType.Stream`
+- **THEN** the result is `false`
+
+#### Scenario: Stream is distinct from ByteArray
+- **WHEN** the PrimitiveType enum is defined
+- **THEN** `PrimitiveType.Stream` and `PrimitiveType.ByteArray` are separate enum members with different values
+

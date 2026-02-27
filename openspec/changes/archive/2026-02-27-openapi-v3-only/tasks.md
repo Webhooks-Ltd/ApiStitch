@@ -1,6 +1,6 @@
 ## 1. Project File Updates
 
-- [x] 1.1 Update `src/ApiStitch/ApiStitch.csproj`: change `<TargetFrameworks>net8.0;net9.0</TargetFrameworks>` to `<TargetFramework>net10.0</TargetFramework>`, replace conditional `ItemGroup` blocks with single unconditional `<PackageReference Include="Microsoft.OpenApi" Version="2.*" />`, remove `Microsoft.OpenApi.Readers` reference
+- [x] 1.1 Update `src/ApiStitch/ApiStitch.csproj`: change `<TargetFrameworks>net8.0;net9.0</TargetFrameworks>` to `<TargetFramework>net10.0</TargetFramework>`, replace conditional `ItemGroup` blocks with single unconditional `Microsoft.OpenApi` 3.x (+ `Microsoft.OpenApi.YamlReader` 3.x), remove `Microsoft.OpenApi.Readers` reference
 - [x] 1.2 Update `src/ApiStitch.Cli/ApiStitch.Cli.csproj`: change `<TargetFramework>net8.0</TargetFramework>` to `<TargetFramework>net10.0</TargetFramework>`
 - [x] 1.3 Update `src/ApiStitch.OpenApi/ApiStitch.OpenApi.csproj`: change `<TargetFrameworks>net9.0;net10.0</TargetFrameworks>` to `<TargetFramework>net10.0</TargetFramework>`, replace conditional `ItemGroup` blocks with single unconditional references to `Microsoft.AspNetCore.OpenApi` 10.x and `Microsoft.Extensions.ApiDescription.Server` 10.x
 - [x] 1.4 Update `tests/ApiStitch.Tests/ApiStitch.Tests.csproj`: change `<TargetFramework>net8.0</TargetFramework>` to `<TargetFramework>net10.0</TargetFramework>`
@@ -10,9 +10,9 @@
 ## 2. OpenApiSpecLoader — Remove v1 Code Path
 
 - [x] 2.1 Remove `#if NET9_0_OR_GREATER` / `#else` / `#endif` blocks from using directives — keep only `using Microsoft.OpenApi;`
-- [x] 2.2 Remove `#if` dispatch in `Load()` — call `LoadV2` logic directly
+- [x] 2.2 Remove `#if` dispatch in `Load()` — call the v3 parser path directly
 - [x] 2.3 Delete `LoadV1()` method entirely (lines 28–81)
-- [x] 2.4 Inline `LoadV2()` as the body of `Load()` — remove the method wrapper and `#if NET9_0_OR_GREATER` / `#endif` guards
+- [x] 2.4 Inline the v3 parser path as the body of `Load()` — remove the method wrapper and `#if NET9_0_OR_GREATER` / `#endif` guards
 
 ## 3. OperationTransformer — Remove v1 Code Path
 
@@ -24,8 +24,8 @@
 ## 4. SchemaTransformer — Remove v1 Code Path and Fix Extension Reading
 
 - [x] 4.1 Remove `#if NET9_0_OR_GREATER` / `#else` / `#endif` from using directives — keep only `using Microsoft.OpenApi;`, add `using System.Text.Json.Nodes;`
-- [x] 4.2 Update vendor extension reading in `TransformSchema` — replace `OpenApiString` cast with v2 `JsonNodeExtension` / `JsonValue` extraction
-- [x] 4.3 Update enum member value extraction in `TransformEnum` — replace `OpenApiString` cast with v2 extraction (`JsonValue.ToString()` or equivalent)
+- [x] 4.2 Update vendor extension reading in `TransformSchema` — replace `OpenApiString` cast with v3 `JsonNodeExtension` / `JsonValue` extraction
+- [x] 4.3 Update enum member value extraction in `TransformEnum` — replace `OpenApiString` cast with v3 extraction (`JsonValue.ToString()` or equivalent)
 
 ## 5. ApiStitchTypeInfoSchemaTransformer — Remove Conditional Compilation
 

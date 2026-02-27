@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define producer-side OpenAPI schema enrichment behavior that writes `x-apistitch-type` CLR type hints used by consumer-side type reuse.
+
+## Requirements
 
 ### Requirement: Schema transformer writes x-apistitch-type extension
 The `ApiStitch.OpenApi` package SHALL provide an `IOpenApiSchemaTransformer` implementation that writes an `x-apistitch-type` vendor extension onto OpenAPI schemas. The extension value SHALL be the CLR `Type.FullName` (namespace-qualified, no assembly name).

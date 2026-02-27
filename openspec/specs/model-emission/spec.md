@@ -1,9 +1,7 @@
 ## Purpose
 
 C# code generation from the semantic model. Emits partial record types with modern idioms (required, init, nullable reference types), System.Text.Json attributes, enum serialization, inheritance, and a partial JsonSerializerContext for AOT-compatible source generation. Produces deterministic, diff-friendly output with one file per type.
-
 ## Requirements
-
 ### Requirement: Emit object schemas as partial records with modern C# idioms
 
 The system SHALL emit each ApiSchema with Kind = Object as a `partial record` with file-scoped namespace, `[GeneratedCode("ApiStitch")]` attribute, and properties using `required`/`init`/nullable modifiers.
@@ -85,7 +83,7 @@ The system SHALL emit each ApiSchema with Kind = Enum as a C# `enum` with `[Json
 
 ### Requirement: Emit a partial JsonSerializerContext for all generated models
 
-The system SHALL emit a single `partial class` inheriting from `JsonSerializerContext` with `[JsonSerializable(typeof(T))]` for every generated record and enum type. The context SHALL be named `{RootNamespaceLastSegment}JsonContext`.
+The system SHALL emit a single `partial class` inheriting from `JsonSerializerContext` with `[JsonSerializable(typeof(T))]` for every generated record, enum type, AND collection types used in client request/response bodies. When client emission is active (i.e., when the specification contains at least one operation), the context SHALL also include `[JsonSerializable(typeof(ProblemDetails))]` for AOT-compatible error deserialization. The context SHALL be named `{RootNamespaceLastSegment}JsonContext`.
 
 #### Scenario: Spec with 3 schemas
 - **WHEN** 3 schemas (Pet, Category, PetStatus enum) are generated with namespace `MyApi.Models`
@@ -95,6 +93,26 @@ The system SHALL emit a single `partial class` inheriting from `JsonSerializerCo
 #### Scenario: Context is partial for user extension
 - **WHEN** the JsonSerializerContext is emitted
 - **THEN** the class is `partial` so users can add additional `[JsonSerializable]` attributes in a companion file
+
+#### Scenario: Collection types from client responses are included
+- **WHEN** an operation returns `IReadOnlyList<Pet>` and another returns `Pet`
+- **THEN** the context includes `[JsonSerializable(typeof(Pet))]` and `[JsonSerializable(typeof(IReadOnlyList<Pet>))]`
+
+#### Scenario: Collection types are deduplicated
+- **WHEN** two operations both return `IReadOnlyList<Pet>`
+- **THEN** only one `[JsonSerializable(typeof(IReadOnlyList<Pet>))]` attribute is emitted
+
+#### Scenario: Collection types from request bodies are included
+- **WHEN** an operation accepts `IReadOnlyList<Pet>` as a request body
+- **THEN** the context includes `[JsonSerializable(typeof(IReadOnlyList<Pet>))]`
+
+#### Scenario: ProblemDetails included when operations exist
+- **WHEN** the specification contains at least one operation (client emission is active)
+- **THEN** the context includes `[JsonSerializable(typeof(ProblemDetails))]`
+
+#### Scenario: ProblemDetails omitted when no operations exist
+- **WHEN** the specification contains no operations (model-only generation)
+- **THEN** the context does NOT include `[JsonSerializable(typeof(ProblemDetails))]`
 
 ### Requirement: Emit properties with enum types correctly
 
@@ -144,3 +162,59 @@ The system SHALL emit inline comments in the generated output when an unsupporte
 - **WHEN** an unsupported schema construct is encountered during emission
 - **THEN** the generated file contains a comment `// ApiStitch: [description of unsupported pattern]` at the relevant location
 - **THEN** a warning diagnostic is also added to the generation result
+
+### Requirement: Skip model emission for external schemas
+The `ScribanModelEmitter` SHALL NOT emit `.cs` files (records or enums) for schemas where `IsExternal` is `true`. External schemas SHALL still be tracked for inclusion in the `JsonSerializerContext`.
+
+#### Scenario: External object schema skipped
+- **WHEN** an ApiSchema with Kind = Object has `IsExternal = true`
+- **THEN** no `.cs` file is emitted for that schema
+- **THEN** the schema's `CSharpTypeName` (FQN) is included in the `[JsonSerializable]` attributes
+
+#### Scenario: External enum schema skipped
+- **WHEN** an ApiSchema with Kind = Enum has `IsExternal = true`
+- **THEN** no `.cs` file is emitted for that schema
+- **THEN** the schema's `CSharpTypeName` (FQN) is included in the `[JsonSerializable]` attributes
+
+#### Scenario: Non-external schemas emitted as before
+- **WHEN** an ApiSchema has `IsExternal = false`
+- **THEN** the schema is emitted as a `.cs` file as before (record for objects, enum for enums)
+
+#### Scenario: Mixed external and non-external schemas
+- **WHEN** a spec has 3 schemas: `Pet` (external), `Category` (non-external), `PetStatus` (external enum)
+- **THEN** only `Category.cs` is emitted
+- **THEN** the `JsonSerializerContext` includes `[JsonSerializable]` for all three types
+
+### Requirement: External base type uses CSharpTypeName in record declaration
+When emitting a non-external derived record, the `ScribanModelEmitter` SHALL use `BaseSchema.CSharpTypeName` (not `BaseSchema.Name`) for the base class name in the record template model. This ensures external base types are referenced by their fully-qualified name, and non-external bases continue to use their short name (since `CSharpTypeName` equals the short name for non-external schemas).
+
+#### Scenario: Derived record with external base
+- **WHEN** non-external `Dog` has `BaseSchema` pointing to external `Animal` with `CSharpTypeName = "SharedModels.Animal"`
+- **THEN** the emitted code is `public sealed partial record Dog : SharedModels.Animal`
+
+#### Scenario: Derived record with non-external base (unchanged)
+- **WHEN** non-external `Dog` has `BaseSchema` pointing to non-external `Animal` with `CSharpTypeName = "Animal"`
+- **THEN** the emitted code is `public sealed partial record Dog : Animal`
+
+### Requirement: Emit enum query string extension methods
+
+The system SHALL emit an `internal static class {EnumName}Extensions` with a `ToQueryString()` method for each enum schema that appears as a query parameter in any operation.
+
+#### Scenario: Enum used as query parameter
+- **WHEN** enum `PetStatus` with values `available`, `pending`, `sold` is used as a query parameter
+- **THEN** a `PetStatusExtensions.cs` file is emitted with class `internal static class PetStatusExtensions`
+- **THEN** the class contains `internal static string ToQueryString(this PetStatus value)` returning wire values via switch expression
+
+#### Scenario: Enum not used as query parameter
+- **WHEN** enum `Category` is only used as an object property, never as a query parameter
+- **THEN** no `CategoryExtensions.cs` file is emitted
+
+#### Scenario: Extension method uses switch expression
+- **WHEN** `PetStatus.ToQueryString()` is called with `PetStatus.Available`
+- **THEN** the result is `"available"` (the original wire value, not the PascalCase C# name)
+
+#### Scenario: AOT safety
+- **WHEN** the extension method is emitted
+- **THEN** it uses a switch expression with string constants (no reflection, no Enum.ToString())
+- **THEN** a `_ => throw new ArgumentOutOfRangeException(nameof(value))` default arm is included
+

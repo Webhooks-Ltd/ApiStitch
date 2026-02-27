@@ -1,4 +1,73 @@
-## MODIFIED Requirements
+# client-emission Specification
+
+## Purpose
+TBD - created by archiving change typed-httpclient-generation. Update Purpose after archive.
+## Requirements
+### Requirement: Emit client interface per tag
+
+The system SHALL emit one `public partial interface` per unique tag value, containing async method signatures for all operations in that tag. The interface name SHALL follow the pattern `I{ApiName}{Tag}Client`.
+
+#### Scenario: Single-tag interface
+- **WHEN** a spec has operations tagged "Pets" with methods `ListPetsAsync` and `GetPetByIdAsync`
+- **THEN** an `IPetStoreApiPetsClient` interface is emitted with both method signatures
+- **THEN** the interface is `public partial`
+- **THEN** the file has `[GeneratedCode("ApiStitch")]` on the type
+
+#### Scenario: Untagged operations use default client name
+- **WHEN** operations have no tags
+- **THEN** they are emitted on `I{ApiName}Client` (e.g., `IPetStoreApiClient`)
+
+#### Scenario: Multi-tag operation appears on each tag interface
+- **WHEN** an operation has `tags: [Pets, Admin]`
+- **THEN** the method signature appears on both `IPetStoreApiPetsClient` and `IPetStoreApiAdminClient`
+
+#### Scenario: Method signature with return type
+- **WHEN** an operation has a success response with body schema `Pet`
+- **THEN** the method returns `Task<Pet>`
+
+#### Scenario: Method signature for no-content response
+- **WHEN** an operation's success response has no body (204)
+- **THEN** the method returns `Task`
+
+#### Scenario: Method signature with no success response
+- **WHEN** an operation has no 2xx response defined
+- **THEN** the method returns `Task`
+
+#### Scenario: CancellationToken on every method
+- **WHEN** any method signature is emitted
+- **THEN** the last parameter is `CancellationToken cancellationToken = default`
+
+#### Scenario: Parameter ordering
+- **WHEN** a method has path params `petId`, body `Pet`, query param `status`, header param `X-Trace`
+- **THEN** the parameter order is: `petId`, `Pet body`, `status`, `xTrace`, `cancellationToken`
+
+#### Scenario: Optional string parameters use nullable defaults
+- **WHEN** a query parameter has IsRequired = false and schema type string
+- **THEN** the parameter is `string? status = null`
+
+#### Scenario: Optional value type parameters use nullable defaults
+- **WHEN** a query parameter has IsRequired = false and schema type int32
+- **THEN** the parameter is `int? limit = null`
+
+#### Scenario: Array return type
+- **WHEN** the success response schema has Kind = Array with item type Pet
+- **THEN** the method returns `Task<IReadOnlyList<Pet>>`
+
+#### Scenario: Deprecated operation gets Obsolete attribute
+- **WHEN** an ApiOperation has IsDeprecated = true
+- **THEN** the interface method has `[Obsolete]` attribute
+
+#### Scenario: Operation descriptions are not emitted
+- **WHEN** an ApiOperation has a Description value
+- **THEN** the description is NOT emitted as XML doc comments or inline comments (XML docs are v1 scope)
+
+### Requirement: All generated awaits use ConfigureAwait(false)
+
+The system SHALL append `.ConfigureAwait(false)` to every `await` expression in all generated client code — including `SendAsync`, `ReadFromJsonAsync`, `EnsureSuccessAsync`, `ReadAsStreamAsync`, `ReadAsStringAsync`, `ReadAsync`, and `FileResponse.CreateAsync`.
+
+#### Scenario: ConfigureAwait on all awaits
+- **WHEN** any async method is emitted in a client implementation
+- **THEN** every `await` expression in the method body has `.ConfigureAwait(false)`
 
 ### Requirement: Emit client implementation per tag
 
@@ -116,13 +185,25 @@ The system SHALL emit one `internal sealed partial class` per tag implementing t
 - **WHEN** an operation has a header parameter `X-Request-Id`
 - **THEN** the generated code calls `request.Headers.TryAddWithoutValidation("X-Request-Id", xRequestId.ToString())` when the value is not null
 
-### Requirement: All generated awaits use ConfigureAwait(false)
+### Requirement: Emit ApiException class
 
-The system SHALL append `.ConfigureAwait(false)` to every `await` expression in all generated client code — including `SendAsync`, `ReadFromJsonAsync`, `EnsureSuccessAsync`, `ReadAsStreamAsync`, `ReadAsStringAsync`, `ReadAsync`, and `FileResponse.CreateAsync`.
+The system SHALL emit a `public sealed class ApiException : HttpRequestException` with `ResponseBody` (string?, truncated at 8KB), `ResponseHeaders`, and `Problem` (ProblemDetails?) properties. StatusCode SHALL be passed through the base constructor.
 
-#### Scenario: ConfigureAwait on all awaits
-- **WHEN** any async method is emitted in a client implementation
-- **THEN** every `await` expression in the method body has `.ConfigureAwait(false)`
+#### Scenario: ApiException structure
+- **WHEN** ApiException is emitted
+- **THEN** it extends `HttpRequestException`
+- **THEN** the constructor passes `HttpStatusCode` to the base constructor's `statusCode` parameter
+- **THEN** the constructor accepts `HttpStatusCode statusCode`, `string? responseBody`, `HttpResponseHeaders? responseHeaders`, and `ProblemDetails? problem = null`
+- **THEN** the message format is `"HTTP {(int)statusCode} ({statusCode})"`
+- **THEN** `ResponseBody` is `string?`, `ResponseHeaders` is `HttpResponseHeaders?`, and `Problem` is `ProblemDetails?`
+
+#### Scenario: ApiException is not prefixed with API name
+- **WHEN** the emitter generates exception code
+- **THEN** the class is named `ApiException` (shared across APIs in the same namespace)
+
+#### Scenario: Namespace deduplication
+- **WHEN** two APIs share the same namespace
+- **THEN** only one `ApiException.cs` file is emitted
 
 ### Requirement: Emit EnsureSuccessAsync helper in each client
 
@@ -169,26 +250,6 @@ The system SHALL emit a `private async Task EnsureSuccessAsync` instance method 
 - **WHEN** `EnsureSuccessAsync` is emitted
 - **THEN** it is `private async Task` (not `private static async Task`) because it accesses `_jsonOptions` for ProblemDetails deserialization
 
-### Requirement: Emit ApiException class
-
-The system SHALL emit a `public sealed class ApiException : HttpRequestException` with `ResponseBody` (string?, truncated at 8KB), `ResponseHeaders`, and `Problem` (ProblemDetails?) properties. StatusCode SHALL be passed through the base constructor.
-
-#### Scenario: ApiException structure
-- **WHEN** ApiException is emitted
-- **THEN** it extends `HttpRequestException`
-- **THEN** the constructor passes `HttpStatusCode` to the base constructor's `statusCode` parameter
-- **THEN** the constructor accepts `HttpStatusCode statusCode`, `string? responseBody`, `HttpResponseHeaders? responseHeaders`, and `ProblemDetails? problem = null`
-- **THEN** the message format is `"HTTP {(int)statusCode} ({statusCode})"`
-- **THEN** `ResponseBody` is `string?`, `ResponseHeaders` is `HttpResponseHeaders?`, and `Problem` is `ProblemDetails?`
-
-#### Scenario: ApiException is not prefixed with API name
-- **WHEN** the emitter generates exception code
-- **THEN** the class is named `ApiException` (shared across APIs in the same namespace)
-
-#### Scenario: Namespace deduplication
-- **WHEN** two APIs share the same namespace
-- **THEN** only one `ApiException.cs` file is emitted
-
 ### Requirement: Emit DI registration extension method
 
 The system SHALL emit a `public static class {ApiName}ServiceCollectionExtensions` with an `Add{ApiName}` method that registers the named HttpClient, all tag clients, and JSON options. No serializer registrations are needed — serialization is inlined in the generated code.
@@ -216,7 +277,117 @@ The system SHALL emit a `public static class {ApiName}ServiceCollectionExtension
 - **WHEN** `Add{ApiName}` is called
 - **THEN** `services.Configure<{ApiName}ClientOptions>(configure)` is called to bind the options
 
-## ADDED Requirements
+### Requirement: Emit ClientOptions class
+
+The system SHALL emit a `public sealed class {ApiName}ClientOptions` with `BaseAddress` (Uri?), `Timeout` (TimeSpan?), and `DefaultHeaders` (Dictionary<string, string>).
+
+#### Scenario: BaseAddress enforces trailing slash
+- **WHEN** BaseAddress is set to `https://api.example.com/v1`
+- **THEN** the stored value is `https://api.example.com/v1/` (trailing slash appended)
+
+#### Scenario: BaseAddress already has trailing slash
+- **WHEN** BaseAddress is set to `https://api.example.com/v1/`
+- **THEN** the stored value is unchanged
+
+#### Scenario: BaseAddress set to null
+- **WHEN** BaseAddress is set to null
+- **THEN** the stored value is null (no trailing slash logic)
+
+#### Scenario: DefaultHeaders initialized
+- **WHEN** ClientOptions is constructed
+- **THEN** DefaultHeaders is an empty `Dictionary<string, string>` (not null)
+
+### Requirement: Emit JsonOptions wrapper class
+
+The system SHALL emit an `internal sealed class {ApiName}JsonOptions` wrapping an immutable `JsonSerializerOptions` initialized with `JsonSerializerDefaults.Web` and the generated `JsonSerializerContext`.
+
+#### Scenario: JsonOptions wrapper structure
+- **WHEN** the wrapper is emitted
+- **THEN** it has a get-only `Options` property of type `JsonSerializerOptions` (no setter, initialized inline)
+- **THEN** Options is initialized with `JsonSerializerDefaults.Web` and `TypeInfoResolver` set to the generated context's `Default`
+
+#### Scenario: Singleton safety
+- **WHEN** `{ApiName}JsonOptions` is registered as singleton
+- **THEN** `JsonSerializerOptions` becomes immutable after first use (thread-safe)
+
+### Requirement: Track which enums are used as query parameters
+
+The system SHALL track which enum schemas appear as query parameters across all operations, so that enum extension methods are only emitted for enums that need them. See `model-emission` spec for the enum extension method emission details.
+
+#### Scenario: Enum used as query parameter is tracked
+- **WHEN** enum `PetStatus` appears as a query parameter in any operation
+- **THEN** the emitter includes `PetStatus` in the set of enums needing query string extensions
+
+#### Scenario: Enum not used as query parameter is not tracked
+- **WHEN** enum `Category` is only used as an object property, never as a query parameter
+- **THEN** `Category` is not included in the set of enums needing query string extensions
+
+### Requirement: Update JsonSerializerContext with collection types
+
+The system SHALL add `[JsonSerializable]` attributes to the generated `JsonSerializerContext` for collection types used in request/response bodies (e.g., `IReadOnlyList<Pet>`), not just element types.
+
+#### Scenario: Response returns array of Pet
+- **WHEN** an operation returns `IReadOnlyList<Pet>` (array response)
+- **THEN** the JsonSerializerContext includes `[JsonSerializable(typeof(IReadOnlyList<Pet>))]` in addition to `[JsonSerializable(typeof(Pet))]`
+
+#### Scenario: Deduplication of collection types
+- **WHEN** two operations both return `IReadOnlyList<Pet>`
+- **THEN** only one `[JsonSerializable(typeof(IReadOnlyList<Pet>))]` attribute is emitted
+
+#### Scenario: Collection type gathering happens in pipeline
+- **WHEN** the pipeline runs operation transformation
+- **THEN** the pipeline collects distinct response/request collection types and passes them to the model emitter
+- **THEN** Templates remain logic-free (no collection type gathering in templates)
+
+### Requirement: ScribanClientEmitter is separate from ScribanModelEmitter
+
+The system SHALL implement `ScribanClientEmitter` as a separate class implementing `IClientEmitter`, not extending `ScribanModelEmitter`. The pipeline calls both emitters independently.
+
+#### Scenario: Independent emission
+- **WHEN** the pipeline calls model and client emission
+- **THEN** `_modelEmitter.Emit(spec, config)` and `_clientEmitter.Emit(spec, config)` are called separately
+- **THEN** their file lists and diagnostics are merged by the pipeline
+
+#### Scenario: Client emission skipped when no operations
+- **WHEN** `specification.Operations` is empty
+- **THEN** the pipeline skips client emission entirely
+- **THEN** existing model-only tests continue to pass unchanged
+
+#### Scenario: Emitter uses embedded Scriban templates
+- **WHEN** ScribanClientEmitter emits files
+- **THEN** templates are loaded as embedded resources from `ApiStitch.Emission.Templates`
+
+### Requirement: Emit one file per generated type
+
+The system SHALL emit each client-side type as a separate `.cs` file with `[GeneratedCode("ApiStitch")]`, file-scoped namespace, `#nullable enable`, and the necessary `using` directives (e.g., `System.Net.Http`, `System.Net.Http.Json`, `System.Net.Http.Headers`, `System.Text`, `System.Text.Json`, `System.CodeDom.Compiler`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Http` as applicable to each file).
+
+#### Scenario: File inventory for single-tag API
+- **WHEN** an API named "PetStoreApi" has one tag "Pets"
+- **THEN** the emitter produces: `IPetStoreApiPetsClient.cs`, `PetStoreApiPetsClient.cs`, `PetStoreApiServiceCollectionExtensions.cs`, `ApiException.cs`, `PetStoreApiClientOptions.cs`, `PetStoreApiJsonOptions.cs`
+
+#### Scenario: File inventory for multi-tag API
+- **WHEN** an API has tags "Pets" and "Store"
+- **THEN** the emitter produces interface + implementation files for each tag, plus the shared files (DI, options, exception, JSON options)
+
+#### Scenario: Files are sorted alphabetically
+- **WHEN** the emitter returns generated files
+- **THEN** the files are ordered alphabetically by file name for deterministic output
+
+### Requirement: Produce deterministic, diff-friendly client output
+
+The system SHALL produce identical client output for identical input across runs. No timestamps, random values, or version numbers SHALL appear in the output.
+
+#### Scenario: Deterministic output across runs
+- **WHEN** the same spec and config are processed twice
+- **THEN** all client files are byte-for-byte identical
+
+#### Scenario: Methods ordered alphabetically by operation name
+- **WHEN** an interface has multiple methods
+- **THEN** methods are ordered alphabetically by operationId (or derived name) for stable output
+
+#### Scenario: GeneratedCode attribute has no version
+- **WHEN** any client type is emitted
+- **THEN** `[GeneratedCode("ApiStitch")]` has no version parameter
 
 ### Requirement: Emit FileResponse class
 
@@ -270,30 +441,3 @@ The system SHALL conditionally emit a `public sealed record ProblemDetails` when
 - **WHEN** no operations exist (model-only generation)
 - **THEN** no `ProblemDetails.cs` file is emitted
 
-### Requirement: Emit one file per generated type
-
-The system SHALL emit each client-side type as a separate `.cs` file with `[GeneratedCode("ApiStitch", null)]`, file-scoped namespace, `#nullable enable`, and the necessary `using` directives.
-
-#### Scenario: File inventory for single-tag API with stream and form operations
-- **WHEN** an API named "PetStoreApi" has one tag "Pets" with JSON, form-encoded, and stream-response operations
-- **THEN** the emitter produces: `IPetStoreApiPetsClient.cs`, `PetStoreApiPetsClient.cs`, `PetStoreApiServiceCollectionExtensions.cs`, `ApiException.cs`, `PetStoreApiClientOptions.cs`, `PetStoreApiJsonOptions.cs`, `FileResponse.cs`, `ProblemDetails.cs`
-
-#### Scenario: Files are sorted alphabetically
-- **WHEN** the emitter returns generated files
-- **THEN** the files are ordered alphabetically by file name for deterministic output
-
-### Requirement: Produce deterministic, diff-friendly client output
-
-The system SHALL produce identical client output for identical input across runs. No timestamps, random values, or version numbers SHALL appear in the output.
-
-#### Scenario: Deterministic output across runs
-- **WHEN** the same spec and config are processed twice
-- **THEN** all client files are byte-for-byte identical
-
-#### Scenario: Methods ordered alphabetically by operation name
-- **WHEN** an interface has multiple methods
-- **THEN** methods are ordered alphabetically by operationId (or derived name) for stable output
-
-#### Scenario: GeneratedCode attribute has no version
-- **WHEN** any client type is emitted
-- **THEN** `[GeneratedCode("ApiStitch", null)]` has no version parameter
