@@ -6,7 +6,18 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>apistitch</ToolCommandName>
     <IsPackable>true</IsPackable>
+    <Description>OpenAPI client generator for .NET with first-class type reuse and clean idiomatic C# output.</Description>
+    <Authors>Webhooks Ltd</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Webhooks-Ltd/ApiStitch</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Webhooks-Ltd/ApiStitch</RepositoryUrl>
+    <PackageTags>openapi;codegen;client;httpclient;swagger;dotnet-tool</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ApiStitch\ApiStitch.csproj" />

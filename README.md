@@ -1,6 +1,7 @@
 # ApiStitch
 
 [![CI](https://github.com/Webhooks-Ltd/ApiStitch/actions/workflows/ci.yml/badge.svg)](https://github.com/Webhooks-Ltd/ApiStitch/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/ApiStitch.Cli.svg)](https://www.nuget.org/packages/ApiStitch.Cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![.NET 10](https://img.shields.io/badge/.NET-10-purple)
 
