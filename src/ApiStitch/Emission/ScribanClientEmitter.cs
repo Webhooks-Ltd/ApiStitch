@@ -21,6 +21,8 @@ public class ScribanClientEmitter : IClientEmitter
     private readonly Template _jsonOptionsTemplate;
     private readonly Template _diRegistrationTemplate;
     private readonly Template _enumExtensionsTemplate;
+    private readonly Template _fileResponseTemplate;
+    private readonly Template _problemDetailsTemplate;
 
     /// <summary>
     /// Creates a new client emitter, loading all templates from embedded resources.
@@ -34,6 +36,8 @@ public class ScribanClientEmitter : IClientEmitter
         _jsonOptionsTemplate = LoadTemplate("JsonOptionsWrapper.sbn-cs");
         _diRegistrationTemplate = LoadTemplate("DiRegistration.sbn-cs");
         _enumExtensionsTemplate = LoadTemplate("EnumExtensions.sbn-cs");
+        _fileResponseTemplate = LoadTemplate("FileResponse.sbn-cs");
+        _problemDetailsTemplate = LoadTemplate("ProblemDetails.sbn-cs");
     }
 
     /// <inheritdoc />
@@ -75,10 +79,16 @@ public class ScribanClientEmitter : IClientEmitter
             tagClients.Add(new { interface_name = interfaceName, class_name = className });
         }
 
+        files.Add(EmitProblemDetails(ns));
         files.Add(EmitApiException(ns));
         files.Add(EmitClientOptions(ns, clientName, optionsClassName));
         files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName));
         files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients));
+
+        var hasStreamResponse = spec.Operations.Any(o =>
+            o.SuccessResponse?.ContentKind == ContentKind.OctetStream);
+        if (hasStreamResponse)
+            files.Add(EmitFileResponse(ns));
 
         foreach (var enumName in queryEnums.OrderBy(n => n, StringComparer.Ordinal))
         {
@@ -111,24 +121,37 @@ public class ScribanClientEmitter : IClientEmitter
             foreach (var p in pathParams)
                 allParams.Add(BuildParamModel(p, queryEnums));
 
+            var (bodyModel, bodyParams) = BuildRequestBodyModel(op.RequestBody);
             if (hasBody)
-            {
-                var bodyTypeName = GetTypeName(op.RequestBody!.Schema);
-                allParams.Add(new
-                {
-                    type_name = bodyTypeName,
-                    param_name = "body",
-                    is_required = op.RequestBody!.IsRequired,
-                    default_value = op.RequestBody!.IsRequired ? (string?)null : "null",
-                });
-            }
+                allParams.AddRange(bodyParams);
 
             foreach (var p in op.Parameters.Where(p => p.Location == ParameterLocation.Query).OrderBy(p => p.Name, StringComparer.Ordinal))
             {
                 hasQueryParams = true;
-                var pm = BuildParamModel(p, queryEnums);
-                allParams.Add(pm);
-                queryParams.Add(BuildQueryParamModel(p, queryEnums));
+
+                if (p.Style == Model.ParameterStyle.DeepObject
+                    && p.Schema.Kind == SchemaKind.Object
+                    && p.Schema.CSharpTypeName is null)
+                {
+                    foreach (var prop in p.Schema.Properties)
+                    {
+                        var propTypeName = GetTypeName(prop.Schema) + "?";
+                        var propParamName = ToCamelCase(prop.CSharpName);
+                        allParams.Add(new
+                        {
+                            type_name = propTypeName,
+                            param_name = propParamName,
+                            is_required = false,
+                            default_value = (string?)"null",
+                        });
+                    }
+                    queryParams.Add(BuildQueryParamModel(p, queryEnums));
+                }
+                else
+                {
+                    allParams.Add(BuildParamModel(p, queryEnums));
+                    queryParams.Add(BuildQueryParamModel(p, queryEnums));
+                }
             }
 
             foreach (var p in op.Parameters.Where(p => p.Location == ParameterLocation.Header).OrderBy(p => p.Name, StringComparer.Ordinal))
@@ -138,13 +161,11 @@ public class ScribanClientEmitter : IClientEmitter
                 headerParams.Add(BuildHeaderParamModel(p));
             }
 
-            var returnType = hasResponseBody
-                ? $"Task<{GetTypeName(op.SuccessResponse!.Schema!)}>"
-                : "Task";
-
-            var responseType = hasResponseBody ? GetTypeName(op.SuccessResponse!.Schema!) : null;
+            var (returnType, responseType, responseModel) = BuildResponseModel(op.SuccessResponse);
 
             var pathTemplate = BuildPathTemplate(op);
+
+            var acceptHeader = op.SuccessResponse?.MediaType;
 
             result.Add(new
             {
@@ -157,7 +178,12 @@ public class ScribanClientEmitter : IClientEmitter
                 has_body = hasBody,
                 has_response_body = hasResponseBody,
                 has_query_params = hasQueryParams,
-                body_param_name = hasBody ? "body" : null,
+                body_content_kind = bodyModel.content_kind,
+                body_param_name = bodyModel.param_name,
+                form_fields = bodyModel.form_fields,
+                multipart_parts = bodyModel.multipart_parts,
+                response_content_kind = responseModel.content_kind,
+                accept_header = acceptHeader,
                 parameters = allParams,
                 query_params = queryParams,
                 header_params = headerParams,
@@ -167,18 +193,209 @@ public class ScribanClientEmitter : IClientEmitter
         return result;
     }
 
+    private (dynamic bodyModel, List<object> bodyParams) BuildRequestBodyModel(ApiRequestBody? requestBody)
+    {
+        var empty = new
+        {
+            content_kind = (string?)null,
+            param_name = (string?)null,
+            form_fields = (List<object>?)null,
+            multipart_parts = (List<object>?)null,
+        };
+
+        if (requestBody is null)
+            return (empty, []);
+
+        // Template matches on lowercase enum name (e.g. "json", "formurlencoded")
+        var contentKind = requestBody.ContentKind.ToString().ToLowerInvariant();
+        var bodyParams = new List<object>();
+
+        switch (requestBody.ContentKind)
+        {
+            case ContentKind.Json:
+            {
+                var typeName = GetTypeName(requestBody.Schema);
+                bodyParams.Add(new
+                {
+                    type_name = typeName,
+                    param_name = "body",
+                    is_required = requestBody.IsRequired,
+                    default_value = requestBody.IsRequired ? (string?)null : "null",
+                });
+
+                return (new
+                {
+                    content_kind = contentKind,
+                    param_name = (string?)"body",
+                    form_fields = (List<object>?)null,
+                    multipart_parts = (List<object>?)null,
+                }, bodyParams);
+            }
+            case ContentKind.FormUrlEncoded:
+            {
+                var formFields = new List<object>();
+                foreach (var prop in requestBody.Schema.Properties)
+                {
+                    var typeName = GetTypeName(prop.Schema);
+                    var paramName = ToCamelCase(prop.CSharpName);
+                    if (!prop.IsRequired)
+                        typeName += "?";
+                    bodyParams.Add(new
+                    {
+                        type_name = typeName,
+                        param_name = paramName,
+                        is_required = prop.IsRequired,
+                        default_value = prop.IsRequired ? (string?)null : "null",
+                    });
+                    formFields.Add(new
+                    {
+                        wire_name = prop.Name,
+                        param_name = paramName,
+                        is_required = prop.IsRequired,
+                    });
+                }
+
+                return (new
+                {
+                    content_kind = contentKind,
+                    param_name = (string?)null,
+                    form_fields = (List<object>?)formFields,
+                    multipart_parts = (List<object>?)null,
+                }, bodyParams);
+            }
+            case ContentKind.MultipartFormData:
+            {
+                var parts = new List<object>();
+                foreach (var prop in requestBody.Schema.Properties)
+                {
+                    var isBinary = prop.Schema.PrimitiveType == PrimitiveType.Stream;
+                    var typeName = GetTypeName(prop.Schema);
+                    var paramName = ToCamelCase(prop.CSharpName);
+                    var hasJsonEncoding = requestBody.PropertyEncodings?.TryGetValue(prop.Name, out var enc) == true
+                        && enc.ContentType.Contains("json", StringComparison.OrdinalIgnoreCase);
+
+                    if (!prop.IsRequired && !isBinary)
+                        typeName += "?";
+
+                    bodyParams.Add(new
+                    {
+                        type_name = typeName,
+                        param_name = paramName,
+                        is_required = isBinary || prop.IsRequired,
+                        default_value = (isBinary || prop.IsRequired) ? (string?)null : "null",
+                    });
+
+                    string? fileNameParamName = null;
+                    if (isBinary)
+                    {
+                        fileNameParamName = paramName + "FileName";
+                        bodyParams.Add(new
+                        {
+                            type_name = "string",
+                            param_name = fileNameParamName,
+                            is_required = true,
+                            default_value = (string?)null,
+                        });
+                    }
+
+                    parts.Add(new
+                    {
+                        wire_name = prop.Name,
+                        param_name = paramName,
+                        is_binary = isBinary,
+                        has_json_encoding = hasJsonEncoding,
+                        file_name_param_name = fileNameParamName,
+                        is_required = prop.IsRequired,
+                    });
+                }
+
+                return (new
+                {
+                    content_kind = contentKind,
+                    param_name = (string?)null,
+                    form_fields = (List<object>?)null,
+                    multipart_parts = (List<object>?)parts,
+                }, bodyParams);
+            }
+            case ContentKind.OctetStream:
+            {
+                bodyParams.Add(new
+                {
+                    type_name = "Stream",
+                    param_name = "body",
+                    is_required = true,
+                    default_value = (string?)null,
+                });
+
+                return (new
+                {
+                    content_kind = contentKind,
+                    param_name = (string?)"body",
+                    form_fields = (List<object>?)null,
+                    multipart_parts = (List<object>?)null,
+                }, bodyParams);
+            }
+            case ContentKind.PlainText:
+            {
+                bodyParams.Add(new
+                {
+                    type_name = "string",
+                    param_name = "body",
+                    is_required = requestBody.IsRequired,
+                    default_value = requestBody.IsRequired ? (string?)null : "null",
+                });
+
+                return (new
+                {
+                    content_kind = contentKind,
+                    param_name = (string?)"body",
+                    form_fields = (List<object>?)null,
+                    multipart_parts = (List<object>?)null,
+                }, bodyParams);
+            }
+            default:
+                return (empty, []);
+        }
+    }
+
+    private (string returnType, string? responseType, dynamic responseModel) BuildResponseModel(ApiResponse? successResponse)
+    {
+        var hasResponseBody = successResponse?.HasBody == true;
+        var contentKind = successResponse?.ContentKind?.ToString().ToLowerInvariant();
+
+        if (!hasResponseBody)
+        {
+            return ("Task", null, new { content_kind = (string?)null });
+        }
+
+        if (successResponse!.ContentKind == ContentKind.OctetStream)
+        {
+            return ("Task<FileResponse>", "FileResponse", new { content_kind = contentKind });
+        }
+
+        if (successResponse.ContentKind == ContentKind.PlainText)
+        {
+            return ("Task<string>", "string", new { content_kind = contentKind });
+        }
+
+        var responseType = GetTypeName(successResponse.Schema!);
+        return ($"Task<{responseType}>", responseType, new { content_kind = contentKind });
+    }
+
+    private static string ToCamelCase(string pascal)
+    {
+        if (string.IsNullOrEmpty(pascal))
+            return pascal;
+        return char.ToLowerInvariant(pascal[0]) + pascal[1..];
+    }
+
     private static object BuildParamModel(ApiParameter param, HashSet<string> queryEnums)
     {
         var typeName = GetTypeName(param.Schema);
         var isValueType = IsValueType(param.Schema);
 
         if (!param.IsRequired)
-        {
-            if (isValueType)
-                typeName += "?";
-            else
-                typeName += "?";
-        }
+            typeName += "?";
 
         if (param.Location == ParameterLocation.Query && param.Schema.Kind == SchemaKind.Enum
             && !param.Schema.IsExternal)
@@ -235,6 +452,20 @@ public class ScribanClientEmitter : IClientEmitter
             toStringExpr = $"{param.CSharpName}{(param.IsRequired || !IsValueType(param.Schema) ? "" : ".Value")}.ToString()";
         }
 
+        var isDeepObject = param.Style == Model.ParameterStyle.DeepObject;
+        var isFlattened = isDeepObject && param.Schema.Kind == SchemaKind.Object && param.Schema.CSharpTypeName is null;
+        List<object>? deepObjectProps = null;
+        if (isDeepObject && param.Schema.Kind == SchemaKind.Object)
+        {
+            deepObjectProps = param.Schema.Properties
+                .Select(p => (object)new
+                {
+                    wire_name = p.Name,
+                    csharp_name = isFlattened ? ToCamelCase(p.CSharpName) : p.CSharpName,
+                })
+                .ToList();
+        }
+
         return new
         {
             wire_name = param.Name,
@@ -242,6 +473,11 @@ public class ScribanClientEmitter : IClientEmitter
             is_required = param.IsRequired,
             is_array = isArray,
             to_string_expr = toStringExpr,
+            style = param.Style.ToString().ToLowerInvariant(),
+            explode = param.Explode,
+            is_deep_object = isDeepObject,
+            is_flattened = isFlattened,
+            deep_object_props = deepObjectProps,
         };
     }
 
@@ -308,6 +544,22 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("namespace", ns);
 
         return RenderTemplate(_exceptionTemplate, "ApiException.cs", model);
+    }
+
+    private GeneratedFile EmitFileResponse(string ns)
+    {
+        var model = new ScriptObject();
+        model.Add("namespace", ns);
+
+        return RenderTemplate(_fileResponseTemplate, "FileResponse.cs", model);
+    }
+
+    private GeneratedFile EmitProblemDetails(string ns)
+    {
+        var model = new ScriptObject();
+        model.Add("namespace", ns);
+
+        return RenderTemplate(_problemDetailsTemplate, "ProblemDetails.cs", model);
     }
 
     private GeneratedFile EmitClientOptions(string ns, string clientName, string optionsClassName)

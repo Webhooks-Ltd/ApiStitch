@@ -15,5 +15,6 @@ public enum PrimitiveType
     TimeSpan,
     Guid,
     Uri,
-    ByteArray
+    ByteArray,
+    Stream,
 }

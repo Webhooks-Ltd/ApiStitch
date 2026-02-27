@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: Advanced HTTP Test
+  version: 1.0.0
+paths:
+  /token:
+    post:
+      operationId: createToken
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type:
+                  type: string
+                scope:
+                  type: string
+      responses:
+        '200':
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+  /files:
+    post:
+      operationId: uploadFile
+      tags: [Files]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                description:
+                  type: string
+                metadata:
+                  type: object
+            encoding:
+              metadata:
+                contentType: application/json
+      responses:
+        '200':
+          description: Upload response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileInfo'
+  /files/{fileId}/download:
+    get:
+      operationId: downloadFile
+      tags: [Files]
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /notes:
+    post:
+      operationId: createNote
+      tags: [Notes]
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Note content
+          content:
+            text/plain:
+              schema:
+                type: string
+  /items:
+    get:
+      operationId: listItems
+      tags: [Items]
+      parameters:
+        - name: filter
+          in: query
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              category:
+                type: string
+        - name: colors
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Items list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+  /negotiate:
+    post:
+      operationId: negotiateContent
+      tags: [Negotiate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NegotiateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiateResponse'
+            application/xml:
+              schema:
+                type: object
+  /upload-raw:
+    post:
+      operationId: uploadRaw
+      tags: [Files]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Upload response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileInfo'
+  /report:
+    get:
+      operationId: downloadReport
+      tags: [Reports]
+      responses:
+        '200':
+          description: PDF report
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+components:
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token, token_type]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+    FileInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+    NegotiateRequest:
+      type: object
+      properties:
+        value:
+          type: string
+    NegotiateResponse:
+      type: object
+      properties:
+        result:
+          type: string

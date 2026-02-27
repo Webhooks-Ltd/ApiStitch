@@ -5,6 +5,7 @@ using ApiStitch.Parsing;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Reader;
 using ParameterLocation = ApiStitch.Model.ParameterLocation;
+using ParameterStyle = ApiStitch.Model.ParameterStyle;
 
 namespace ApiStitch.Tests.Parsing;
 
@@ -108,7 +109,8 @@ public class OperationTransformerTests
         Assert.NotNull(op.RequestBody);
         Assert.Equal("Pet", op.RequestBody!.Schema.Name);
         Assert.True(op.RequestBody.IsRequired);
-        Assert.Equal("application/json", op.RequestBody.ContentType);
+        Assert.Equal(ContentKind.Json, op.RequestBody.ContentKind);
+        Assert.Equal("application/json", op.RequestBody.MediaType);
     }
 
     [Fact]
@@ -386,6 +388,205 @@ public class OperationTransformerTests
     }
 
     // ──────────────────────────────────────────────
+    // Parameter style/explode
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public void Parameter_QueryDefault_FormExplodeTrue()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  parameters:
+                    - name: status
+                      in: query
+                      schema:
+                        type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        var param = Assert.Single(op.Parameters);
+        Assert.Equal(ParameterStyle.Form, param.Style);
+        Assert.True(param.Explode);
+    }
+
+    [Fact]
+    public void Parameter_PathDefault_SimpleFalse()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets/{petId}:
+                get:
+                  operationId: getPet
+                  tags: [Pets]
+                  parameters:
+                    - name: petId
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        var param = Assert.Single(op.Parameters);
+        Assert.Equal(ParameterStyle.Simple, param.Style);
+        Assert.False(param.Explode);
+    }
+
+    [Fact]
+    public void Parameter_ExplicitFormExplodeFalse_Accepted()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  parameters:
+                    - name: colors
+                      in: query
+                      style: form
+                      explode: false
+                      schema:
+                        type: array
+                        items:
+                          type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        var param = Assert.Single(op.Parameters);
+        Assert.Equal(ParameterStyle.Form, param.Style);
+        Assert.False(param.Explode);
+    }
+
+    [Fact]
+    public void Parameter_DeepObjectExplodeTrue_AcceptsInlineObject()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  parameters:
+                    - name: filter
+                      in: query
+                      style: deepObject
+                      explode: true
+                      schema:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                          type:
+                            type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        var param = Assert.Single(op.Parameters);
+        Assert.Equal(ParameterStyle.DeepObject, param.Style);
+        Assert.True(param.Explode);
+        Assert.Equal(SchemaKind.Object, param.Schema.Kind);
+        Assert.Equal(2, param.Schema.Properties.Count);
+        Assert.DoesNotContain(diags, d => d.Code == "AS401");
+    }
+
+    [Fact]
+    public void Parameter_DeepObjectExplodeFalse_SkippedWithAS407()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  parameters:
+                    - name: filter
+                      in: query
+                      style: deepObject
+                      explode: false
+                      schema:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.Empty(op.Parameters);
+        Assert.Contains(diags, d => d.Code == "AS407");
+    }
+
+    [Fact]
+    public void Parameter_PipeDelimited_SkippedWithAS407()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  parameters:
+                    - name: ids
+                      in: query
+                      style: pipeDelimited
+                      schema:
+                        type: array
+                        items:
+                          type: integer
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.Empty(op.Parameters);
+        Assert.Contains(diags, d => d.Code == "AS407");
+    }
+
+    // ──────────────────────────────────────────────
     // 6.4 Request body
     // ──────────────────────────────────────────────
 
@@ -469,9 +670,66 @@ public class OperationTransformerTests
     }
 
     [Fact]
-    public void RequestBody_NonJsonContentType_RequiredBody_AS404_OperationSkipped()
+    public void RequestBody_UnsupportedContentType_RequiredBody_AS404_OperationSkipped()
     {
         var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /data:
+                post:
+                  operationId: postXml
+                  tags: [Data]
+                  requestBody:
+                    required: true
+                    content:
+                      application/xml:
+                        schema:
+                          type: object
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        Assert.Empty(ops);
+        Assert.Contains(diags, d => d.Code == "AS404");
+    }
+
+    [Fact]
+    public void RequestBody_UnsupportedContentType_OptionalBody_NotSkipped()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /data:
+                post:
+                  operationId: postXml
+                  tags: [Data]
+                  requestBody:
+                    required: false
+                    content:
+                      application/xml:
+                        schema:
+                          type: object
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        Assert.Single(ops);
+        Assert.Contains(diags, d => d.Code == "AS404");
+        Assert.Null(ops[0].RequestBody);
+    }
+
+    [Fact]
+    public void RequestBody_MultipartFormData_ParsesCorrectly()
+    {
+        var (ops, _, _) = TransformOperations("""
             openapi: 3.0.3
             info: { title: Test, version: 1.0.0 }
             paths:
@@ -489,38 +747,8 @@ public class OperationTransformerTests
                             file:
                               type: string
                               format: binary
-                  responses:
-                    '200':
-                      description: OK
-            components:
-              schemas: {}
-            """);
-
-        Assert.Empty(ops);
-        Assert.Contains(diags, d => d.Code == "AS404");
-    }
-
-    [Fact]
-    public void RequestBody_NonJsonContentType_OptionalBody_NotSkipped()
-    {
-        var (ops, _, diags) = TransformOperations("""
-            openapi: 3.0.3
-            info: { title: Test, version: 1.0.0 }
-            paths:
-              /upload:
-                post:
-                  operationId: uploadFile
-                  tags: [Files]
-                  requestBody:
-                    required: false
-                    content:
-                      multipart/form-data:
-                        schema:
-                          type: object
-                          properties:
-                            file:
+                            description:
                               type: string
-                              format: binary
                   responses:
                     '200':
                       description: OK
@@ -528,9 +756,11 @@ public class OperationTransformerTests
               schemas: {}
             """);
 
-        Assert.Single(ops);
-        Assert.Contains(diags, d => d.Code == "AS404");
-        Assert.Null(ops[0].RequestBody);
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.MultipartFormData, op.RequestBody!.ContentKind);
+        Assert.Equal("multipart/form-data", op.RequestBody.MediaType);
+        Assert.Equal(2, op.RequestBody.Schema.Properties.Count);
     }
 
     [Fact]
@@ -1152,5 +1382,413 @@ public class OperationTransformerTests
             """);
 
         Assert.Equal("ApiClient", clientName);
+    }
+
+    // ──────────────────────────────────────────────
+    // Content Type Parsing
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public void RequestBody_FormUrlEncoded_ParsesCorrectly()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /token:
+                post:
+                  operationId: createToken
+                  tags: [Auth]
+                  requestBody:
+                    required: true
+                    content:
+                      application/x-www-form-urlencoded:
+                        schema:
+                          type: object
+                          required: [grant_type]
+                          properties:
+                            grant_type:
+                              type: string
+                            scope:
+                              type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.FormUrlEncoded, op.RequestBody!.ContentKind);
+        Assert.Equal("application/x-www-form-urlencoded", op.RequestBody.MediaType);
+        Assert.Equal(2, op.RequestBody.Schema.Properties.Count);
+    }
+
+    [Fact]
+    public void RequestBody_OctetStream_ParsesAsStream()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /upload:
+                post:
+                  operationId: uploadRaw
+                  tags: [Files]
+                  requestBody:
+                    required: true
+                    content:
+                      application/octet-stream:
+                        schema:
+                          type: string
+                          format: binary
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.OctetStream, op.RequestBody!.ContentKind);
+        Assert.Equal(PrimitiveType.Stream, op.RequestBody.Schema.PrimitiveType);
+    }
+
+    [Fact]
+    public void RequestBody_PlainText_ParsesAsString()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /notes:
+                post:
+                  operationId: createNote
+                  tags: [Notes]
+                  requestBody:
+                    required: true
+                    content:
+                      text/plain:
+                        schema:
+                          type: string
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.PlainText, op.RequestBody!.ContentKind);
+        Assert.Equal(PrimitiveType.String, op.RequestBody.Schema.PrimitiveType);
+    }
+
+    [Fact]
+    public void RequestBody_ContentNegotiation_PrefersJson()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /token:
+                post:
+                  operationId: createToken
+                  tags: [Auth]
+                  requestBody:
+                    required: true
+                    content:
+                      application/x-www-form-urlencoded:
+                        schema:
+                          type: object
+                          properties:
+                            grant_type:
+                              type: string
+                      application/json:
+                        schema:
+                          $ref: '#/components/schemas/TokenRequest'
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas:
+                TokenRequest:
+                  type: object
+                  properties:
+                    grant_type:
+                      type: string
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.Json, op.RequestBody!.ContentKind);
+        Assert.Contains(diags, d => d.Code == "AS409");
+    }
+
+    [Fact]
+    public void Response_OctetStream_ParsesAsStream()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /report:
+                get:
+                  operationId: downloadReport
+                  tags: [Reports]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/pdf:
+                          schema:
+                            type: string
+                            format: binary
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(ContentKind.OctetStream, op.SuccessResponse!.ContentKind);
+        Assert.Equal("application/pdf", op.SuccessResponse.MediaType);
+        Assert.Equal(PrimitiveType.Stream, op.SuccessResponse.Schema!.PrimitiveType);
+    }
+
+    [Fact]
+    public void Response_PlainText_ParsesAsString()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /health:
+                get:
+                  operationId: getHealth
+                  tags: [System]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        text/plain:
+                          schema:
+                            type: string
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(ContentKind.PlainText, op.SuccessResponse!.ContentKind);
+        Assert.Equal(PrimitiveType.String, op.SuccessResponse.Schema!.PrimitiveType);
+    }
+
+    [Fact]
+    public void Response_PlainText_NoSchema_SynthesizesString()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /health:
+                get:
+                  operationId: getHealth
+                  tags: [System]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        text/plain: {}
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(ContentKind.PlainText, op.SuccessResponse!.ContentKind);
+        Assert.Equal(PrimitiveType.String, op.SuccessResponse.Schema!.PrimitiveType);
+    }
+
+    [Fact]
+    public void Response_ContentNegotiation_PrefersJson()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /data:
+                get:
+                  operationId: getData
+                  tags: [Data]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/xml:
+                          schema:
+                            type: object
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/DataItem'
+            components:
+              schemas:
+                DataItem:
+                  type: object
+                  properties:
+                    value:
+                      type: string
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(ContentKind.Json, op.SuccessResponse!.ContentKind);
+    }
+
+    [Fact]
+    public void RequestBody_FormEncoded_ComplexRef_RejectedWithAS401()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /form:
+                post:
+                  operationId: postForm
+                  tags: [Forms]
+                  requestBody:
+                    required: true
+                    content:
+                      application/x-www-form-urlencoded:
+                        schema:
+                          type: object
+                          properties:
+                            nested:
+                              $ref: '#/components/schemas/Nested'
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas:
+                Nested:
+                  type: object
+                  properties:
+                    value:
+                      type: string
+            """);
+
+        Assert.Empty(ops);
+        Assert.Contains(diags, d => d.Code == "AS401");
+    }
+
+    [Fact]
+    public void RequestBody_Multipart_BinaryProperty_MapsToStream()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /upload:
+                post:
+                  operationId: uploadFile
+                  tags: [Files]
+                  requestBody:
+                    required: true
+                    content:
+                      multipart/form-data:
+                        schema:
+                          type: object
+                          properties:
+                            file:
+                              type: string
+                              format: binary
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.Equal(ContentKind.MultipartFormData, op.RequestBody!.ContentKind);
+        var fileProp = op.RequestBody.Schema.Properties.Single(p => p.Name == "file");
+        Assert.Equal(PrimitiveType.Stream, fileProp.Schema.PrimitiveType);
+    }
+
+    [Fact]
+    public void RequestBody_Multipart_Encoding_ParsedCorrectly()
+    {
+        var (ops, _, _) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /upload:
+                post:
+                  operationId: uploadFile
+                  tags: [Files]
+                  requestBody:
+                    required: true
+                    content:
+                      multipart/form-data:
+                        schema:
+                          type: object
+                          properties:
+                            file:
+                              type: string
+                              format: binary
+                            metadata:
+                              type: object
+                        encoding:
+                          metadata:
+                            contentType: application/json
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.RequestBody);
+        Assert.NotNull(op.RequestBody!.PropertyEncodings);
+        Assert.True(op.RequestBody.PropertyEncodings!.ContainsKey("metadata"));
+        Assert.Equal("application/json", op.RequestBody.PropertyEncodings["metadata"].ContentType);
+    }
+
+    [Fact]
+    public void RequestBody_Multipart_Encoding_UnknownProperty_EmitsAS408()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /upload:
+                post:
+                  operationId: uploadFile
+                  tags: [Files]
+                  requestBody:
+                    required: true
+                    content:
+                      multipart/form-data:
+                        schema:
+                          type: object
+                          properties:
+                            file:
+                              type: string
+                              format: binary
+                        encoding:
+                          nonExistent:
+                            contentType: application/json
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        Assert.Single(ops);
+        Assert.Contains(diags, d => d.Code == "AS408");
     }
 }
