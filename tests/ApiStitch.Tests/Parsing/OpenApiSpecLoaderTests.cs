@@ -1,6 +1,8 @@
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
 using ApiStitch.Parsing;
+using System.Net;
+using System.Net.Http;
 
 namespace ApiStitch.Tests.Parsing;
 
@@ -104,6 +106,254 @@ public class OpenApiSpecLoaderTests
         finally
         {
             File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task RemoteHttpsYaml_ReturnsDocument()
+    {
+        const string yaml = """
+            openapi: 3.0.3
+            info:
+              title: Remote
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+            """;
+
+        using var client = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(yaml),
+            }));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.NotNull(doc);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(doc.Components!.Schemas!, s => s.Key == "Pet");
+    }
+
+    [Fact]
+    public async Task RemoteHttpJson_ReturnsDocument()
+    {
+        const string json = """
+            {
+              "openapi": "3.0.3",
+              "info": { "title": "Remote", "version": "1.0.0" },
+              "paths": {},
+              "components": {
+                "schemas": {
+                  "Pet": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer" }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
+        using var client = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json),
+            }));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("http://example.test/openapi.json", httpClient: client);
+
+        Assert.NotNull(doc);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(doc.Components!.Schemas!, s => s.Key == "Pet");
+    }
+
+    [Fact]
+    public async Task UnsupportedUriScheme_ReturnsError()
+    {
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("ftp://example.test/openapi.yaml");
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("Only http and https are supported", diag.Message);
+    }
+
+    [Fact]
+    public async Task RemoteNonSuccessStatus_ReturnsError()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("HTTP 404", diag.Message);
+    }
+
+    [Fact]
+    public async Task RemoteRequestException_ReturnsError()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler((Func<HttpRequestMessage, HttpResponseMessage>)(_ => throw new HttpRequestException("dns failure"))));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("dns failure", diag.Message);
+    }
+
+    [Fact]
+    public async Task RemoteResponseTooLarge_ReturnsError()
+    {
+        var largePayload = new string('a', 10 * 1024 * 1024 + 1);
+        using var client = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(largePayload),
+            }));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("maximum allowed size", diag.Message);
+    }
+
+    [Fact]
+    public async Task RemoteRedirectLimitExceeded_ReturnsError()
+    {
+        var count = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(_ =>
+        {
+            count++;
+            return new HttpResponseMessage(HttpStatusCode.Redirect)
+            {
+                Headers =
+                {
+                    Location = new Uri($"https://example.test/redirect/{count}")
+                }
+            };
+        }));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("redirect limit", diag.Message);
+    }
+
+    [Fact]
+    public async Task RedirectToUnsupportedScheme_ReturnsError()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.Redirect)
+            {
+                Headers =
+                {
+                    Location = new Uri("ftp://example.test/openapi.yaml")
+                }
+            }));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("Only http and https are supported", diag.Message);
+    }
+
+    [Fact]
+    public async Task RemoteTimeout_ReturnsTimeoutDiagnostic()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler((Func<HttpRequestMessage, HttpResponseMessage>)(_ => throw new TaskCanceledException("request timeout"))));
+
+        var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", httpClient: client);
+
+        Assert.Null(doc);
+        var diag = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
+        Assert.Equal("AS100", diag.Code);
+        Assert.Contains("Timed out fetching OpenAPI spec URL", diag.Message);
+    }
+
+    [Fact]
+    public async Task WindowsAbsolutePath_IsTreatedAsLocalPath()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"apistitch-win-path-{Guid.NewGuid():N}.yaml");
+        await File.WriteAllTextAsync(tempFile, """
+            openapi: 3.0.3
+            info:
+              title: Local
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+            """);
+
+        try
+        {
+            var (doc, diagnostics) = await OpenApiSpecLoader.LoadAsync(tempFile);
+
+            Assert.NotNull(doc);
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+            Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Only http and https are supported", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task CancellationDuringRemoteFetch_ThrowsOperationCanceled()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(async _ =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}"),
+            };
+        }));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await OpenApiSpecLoader.LoadAsync("https://example.test/openapi.yaml", cts.Token, client));
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _responder = responder;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+            : this(request => Task.FromResult(responder(request)))
+        {
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return _responder(request);
         }
     }
 }

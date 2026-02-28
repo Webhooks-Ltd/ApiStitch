@@ -1,3 +1,7 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
 namespace ApiStitch.IntegrationTests;
 
 public class CliTests : IDisposable
@@ -211,5 +215,131 @@ public class CliTests : IDisposable
         var result = await CliTestHelper.RunAsync($"generate --spec \"{specPath}\" --output \"{outputDir}\"");
 
         Assert.Equal(0, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task GenerateWithRemoteSpecUrl_PassesUrlToLoader()
+    {
+        var outputDir = Path.Combine(_tempDir, "output-remote");
+        var url = "https://127.0.0.1:9/openapi.yaml";
+
+        var result = await CliTestHelper.RunAsync($"generate --spec \"{url}\" --output \"{outputDir}\"");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Failed to fetch OpenAPI spec URL", result.Stderr);
+        Assert.DoesNotContain("OpenAPI spec file not found", result.Stderr);
+    }
+
+    [Fact]
+    public async Task GenerateWithRemoteSpecUrl_Succeeds()
+    {
+        var outputDir = Path.Combine(_tempDir, "output-remote-success");
+        var specContent = await File.ReadAllTextAsync(Path.Combine(_specsDir, "petstore.yaml"));
+
+        await using var server = await SingleResponseHttpServer.StartAsync(specContent, "application/yaml");
+        var result = await CliTestHelper.RunAsync($"generate --spec \"{server.Url}\" --output \"{outputDir}\"");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("Generated", result.Stdout);
+        Assert.NotEmpty(Directory.GetFiles(outputDir, "*.cs", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task CliSpecUrl_OverridesYamlLocalSpec()
+    {
+        var localMissing = Path.Combine(_tempDir, "missing-local.yaml");
+        var outputDir = Path.Combine(_tempDir, "output-override-url");
+        var yamlPath = Path.Combine(_tempDir, "openapi-stitch.yaml");
+        var url = "https://127.0.0.1:9/openapi.yaml";
+
+        var yamlContent = $"""
+            spec: {localMissing.Replace("\\", "/")}
+            namespace: PetStore.Client
+            outputDir: {outputDir.Replace("\\", "/")}
+            """;
+        await File.WriteAllTextAsync(yamlPath, yamlContent);
+
+        var result = await CliTestHelper.RunAsync($"generate --config \"{yamlPath}\" --spec \"{url}\"");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Failed to fetch OpenAPI spec URL", result.Stderr);
+        Assert.DoesNotContain(localMissing, result.Stderr);
+    }
+
+    private sealed class SingleResponseHttpServer : IAsyncDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly string _response;
+        private readonly CancellationTokenSource _cts;
+        private readonly Task _serveTask;
+
+        private SingleResponseHttpServer(TcpListener listener, string response, CancellationTokenSource cts)
+        {
+            _listener = listener;
+            _response = response;
+            _cts = cts;
+            _serveTask = Task.Run(ServeLoopAsync);
+        }
+
+        public string Url => $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/openapi.yaml";
+
+        public static async Task<SingleResponseHttpServer> StartAsync(string content, string contentType)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+
+            var bytes = Encoding.UTF8.GetBytes(content);
+            var headers = $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nContent-Length: {bytes.Length}\r\nConnection: close\r\n\r\n";
+            var response = headers + content;
+            var cts = new CancellationTokenSource();
+            var server = new SingleResponseHttpServer(listener, response, cts);
+            await Task.Yield();
+            return server;
+        }
+
+        private async Task ServeLoopAsync()
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                TcpClient? client = null;
+                try
+                {
+                    client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                    await using var stream = client.GetStream();
+
+                    var buffer = new byte[4096];
+                    _ = await stream.ReadAsync(buffer, _cts.Token);
+
+                    var responseBytes = Encoding.UTF8.GetBytes(_response);
+                    await stream.WriteAsync(responseBytes, _cts.Token);
+                    await stream.FlushAsync(_cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    client?.Dispose();
+                }
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _cts.Cancel();
+            _listener.Stop();
+            try
+            {
+                await _serveTask;
+            }
+            catch
+            {
+            }
+            _cts.Dispose();
+        }
     }
 }

@@ -5,7 +5,7 @@ using ApiStitch.Diagnostics;
 using ApiStitch.Generation;
 using ApiStitch.IO;
 
-var specOption = new Option<string?>("--spec") { Description = "Path to OpenAPI spec file" };
+var specOption = new Option<string?>("--spec") { Description = "Path or HTTP(S) URL to OpenAPI spec" };
 var projectOption = new Option<string?>("--project") { Description = "Path to .csproj; the project will be built and run to extract its OpenAPI spec" };
 var outputOption = new Option<string?>("--output") { Description = "Output directory for generated files" };
 var namespaceOption = new Option<string?>("--namespace") { Description = "C# namespace for generated types" };
@@ -79,9 +79,9 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
             var yamlDir = Path.GetDirectoryName(Path.GetFullPath(yamlPath))!;
             var resolvedSpec = specArg != null
-                ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg))
+                ? ResolveSpecInput(specArg, Environment.CurrentDirectory)
                 : loadedConfig.Spec != null
-                    ? Path.GetFullPath(Path.Combine(yamlDir, loadedConfig.Spec))
+                    ? ResolveSpecInput(loadedConfig.Spec, yamlDir)
                     : null;
             var resolvedOutput = outputArg != null
                 ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, outputArg))
@@ -132,7 +132,7 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
             config = new ApiStitchConfig
             {
-                Spec = specArg != null ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, specArg)) : null,
+                Spec = specArg != null ? ResolveSpecInput(specArg, Environment.CurrentDirectory) : null,
                 Project = projectArg,
                 Namespace = namespaceArg ?? "ApiStitch.Generated",
                 OutputDir = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, displayOutputDir)),
@@ -178,7 +178,7 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
         }
 
         var pipeline = new GenerationPipeline();
-        var result = pipeline.Generate(config);
+        var result = await pipeline.GenerateAsync(config, linked.Token);
 
         allDiagnostics.AddRange(result.Diagnostics);
         WriteDiagnostics(allDiagnostics);
@@ -235,4 +235,20 @@ static void WriteSummary(FileWriteResult result, string outputDir)
 
     var suffix = parts.Count > 0 ? $" ({string.Join(", ", parts)})" : "";
     Console.WriteLine($"Generated {result.Written.Count} files in {outputDir}{suffix}");
+}
+
+static string ResolveSpecInput(string spec, string baseDirectory)
+{
+    if (LooksLikeRemoteHttpSpec(spec))
+        return spec;
+
+    return Path.GetFullPath(Path.Combine(baseDirectory, spec));
+}
+
+static bool LooksLikeRemoteHttpSpec(string spec)
+{
+    if (!Uri.TryCreate(spec, UriKind.Absolute, out var absolute))
+        return false;
+
+    return absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps;
 }

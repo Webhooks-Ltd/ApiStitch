@@ -23,3 +23,9 @@ context: |
   - Deterministic, diff-friendly — sorted alphabetically, no timestamps
   - Partial classes on all generated types for extensibility
   - Type reuse via x-apistitch-type vendor extensions + namespace include/exclude config
+
+  ## Definition of Done for User-Visible Changes
+
+  - For behavior/configuration/CLI changes, update `README.md` and `CHANGELOG.md` in the same change.
+  - In tasks.md, include explicit checklist items for README updates and a CHANGELOG `Unreleased` entry.
+  - If docs are intentionally not updated, state why in artifacts/tasks.

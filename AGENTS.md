@@ -58,6 +58,14 @@ Banned:
   - the proposed solution (smallest safe fix).
 - If a request is scoped to samples/docs, do not modify `src/ApiStitch/**` unless explicitly approved by the user.
 
+## Documentation Definition of Done
+
+- For any user-visible behavior/configuration/CLI change, update both `README.md` and `CHANGELOG.md` in the same change.
+- In OpenSpec task creation, include explicit checklist items for:
+  - updating `README.md` for new/changed behavior, options, or examples, and
+  - adding an `Unreleased` entry to `CHANGELOG.md`.
+- If docs are intentionally not updated, state why in the change artifacts/tasks.
+
 ## Operational Safety
 
 - Never switch Kubernetes context as part of automation.

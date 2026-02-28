@@ -28,12 +28,20 @@ public class GenerationPipeline
     /// </summary>
     public GenerationResult Generate(ApiStitchConfig config)
     {
+        return GenerateAsync(config, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Runs the generation pipeline for the given configuration asynchronously.
+    /// </summary>
+    public async Task<GenerationResult> GenerateAsync(ApiStitchConfig config, CancellationToken cancellationToken = default)
+    {
         var allDiagnostics = new List<Diagnostic>();
 
         if (string.IsNullOrWhiteSpace(config.Spec))
             return new GenerationResult([], [new Diagnostic(DiagnosticSeverity.Error, "AS100", "No spec path configured. Set 'spec' or 'project' in configuration.")]);
 
-        var (document, loadDiagnostics) = OpenApiSpecLoader.Load(config.Spec);
+        var (document, loadDiagnostics) = await OpenApiSpecLoader.LoadAsync(config.Spec, cancellationToken).ConfigureAwait(false);
         allDiagnostics.AddRange(loadDiagnostics);
 
         if (document == null)
