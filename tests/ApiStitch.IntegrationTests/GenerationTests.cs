@@ -261,6 +261,9 @@ public class GenerationTests
         Assert.Contains("PatchPetAsync", petsClientFile.Content);
         Assert.Contains("JsonPatchDocument<SampleApi.Models.Pet>", petsClientFile.Content);
         Assert.Contains("request.Content = JsonContent.Create(body);", petsClientFile.Content);
+        Assert.Contains("request.Content = JsonContent.Create(body, mediaType: null, _jsonOptions);", petsClientFile.Content);
+        Assert.Contains("ReadFromJsonAsync<SampleApi.Models.Pet>(", petsClientFile.Content);
+        Assert.Contains("_jsonOptions, cancellationToken", petsClientFile.Content);
 
         var requestFile = result.Files.First(f => f.RelativePath == "CreatePetRequest.cs");
         Assert.Contains("partial record CreatePetRequest", requestFile.Content);
@@ -442,6 +445,54 @@ public class GenerationTests
         Assert.Contains("JsonPatchDocument<SampleApi.Models.Pet>", uploadsClientFile.Content);
         Assert.Contains("content.Add(JsonContent.Create(patch), \"patch\");", uploadsClientFile.Content);
         Assert.DoesNotContain("content.Add(JsonContent.Create(patch, mediaType: null, _jsonOptions), \"patch\");", uploadsClientFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_JsonPatchNameDecoy_UsesGeneratedJsonOptions()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-json-patch-name-decoy.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.Contains("SampleApi.Models.JsonPatchDocumentWrapper", contextFile.Content);
+
+        var decoysClientFile = result.Files.First(f => f.RelativePath.EndsWith("DecoysClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("request.Content = JsonContent.Create(body, mediaType: null, _jsonOptions);", decoysClientFile.Content);
+        Assert.Contains("ReadFromJsonAsync<SampleApi.Models.JsonPatchDocumentWrapper>(", decoysClientFile.Content);
+        Assert.Contains("_jsonOptions, cancellationToken", decoysClientFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_CompositionSchema_FallsBackToRuntimeJsonApis()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-composition-fallback.yaml"),
+            Namespace = "Generated.Models",
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.DoesNotContain("PatchEnvelope", contextFile.Content);
+
+        var patchesClientFile = result.Files.First(f => f.RelativePath.EndsWith("PatchesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("request.Content = JsonContent.Create(body);", patchesClientFile.Content);
+        Assert.DoesNotContain("request.Content = JsonContent.Create(body, mediaType: null, _jsonOptions);", patchesClientFile.Content);
+        Assert.Contains("ReadFromJsonAsync<PatchEnvelope>(", patchesClientFile.Content);
+        Assert.Contains("cancellationToken).ConfigureAwait(false))!;", patchesClientFile.Content);
+        Assert.DoesNotContain("_jsonOptions, cancellationToken", patchesClientFile.Content);
     }
 
     [Fact]

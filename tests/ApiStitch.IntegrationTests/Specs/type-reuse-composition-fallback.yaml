@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: Type Reuse Composition Fallback API
+  version: 1.0.0
+paths:
+  /patch-envelopes:
+    post:
+      operationId: createPatchEnvelope
+      tags: [Patches]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchEnvelope'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatchEnvelope'
+components:
+  schemas:
+    PatchEnvelope:
+      type: object
+      oneOf:
+        - $ref: '#/components/schemas/PatchA'
+        - $ref: '#/components/schemas/PatchB'
+    PatchA:
+      type: object
+      properties:
+        type:
+          type: string
+        value:
+          type: string
+    PatchB:
+      type: object
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+          format: int32

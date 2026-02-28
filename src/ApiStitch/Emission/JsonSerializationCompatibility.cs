@@ -24,6 +24,9 @@ internal static class JsonSerializationCompatibility
         if (!visited.Add(schema))
             return false;
 
+        if (schema.HasUnrepresentableComposition)
+            return true;
+
         if (schema.ExternalTypeKind == ExternalTypeKind.JsonPatchDocument)
             return true;
 

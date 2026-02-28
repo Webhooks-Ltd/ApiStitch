@@ -26,4 +26,5 @@ public class ApiSchema
     public List<Diagnostic> Diagnostics { get; } = [];
     internal ApiSchema? AllOfRefTarget { get; set; }
     internal bool HasAllOfInlineProperties { get; set; }
+    internal bool HasUnrepresentableComposition { get; set; }
 }

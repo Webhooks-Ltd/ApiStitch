@@ -73,12 +73,16 @@ The system SHALL append `.ConfigureAwait(false)` to every `await` expression in 
 
 The system SHALL emit one `internal sealed partial class` per tag implementing the corresponding interface. The implementation SHALL store `IHttpClientFactory` and create a client per method call. The implementation SHALL handle request body emission for all supported `ContentKind` values (Json, FormUrlEncoded, MultipartFormData, OctetStream, PlainText), response handling for all supported content types (JSON deserialization, plain text reading, stream responses via FileResponse), Accept header generation on every request with a response body, and Content-Type validation before JSON deserialization.
 
+JSON serialization/deserialization path selection SHALL use schema compatibility policy derived from semantic schema metadata (not emitted C# type-name pattern checks):
+- compatible schema graphs use generated `_jsonOptions`
+- unsupported schema graphs use runtime JSON APIs without `_jsonOptions`
+
 #### Scenario: Implementation class structure
 - **WHEN** an interface `IPetStoreApiPetsClient` exists
 - **THEN** a `PetStoreApiPetsClient` class is emitted that is `internal sealed partial` and implements `IPetStoreApiPetsClient`
 - **THEN** the constructor accepts `IHttpClientFactory` and `{ApiName}JsonOptions`
 - **THEN** `IHttpClientFactory` is stored in a field, not `HttpClient`
-- **THEN** the file has `[GeneratedCode("ApiStitch", null)]` on the type
+- **THEN** the file has `[GeneratedCode("ApiStitch")]` on the type
 
 #### Scenario: Per-call HttpClient creation
 - **WHEN** any HTTP method is invoked
@@ -94,9 +98,13 @@ The system SHALL emit one `internal sealed partial class` per tag implementing t
 - **THEN** the generated code uses `$"pets/{Uri.EscapeDataString(petId.ToString())}"` for the URI
 - **THEN** the URI is relative (no leading `/`)
 
-#### Scenario: POST request with JSON body
-- **WHEN** an operation is `POST pets` with request body ContentKind = Json and body type `Pet`
+#### Scenario: POST request with JSON body (compatible schema)
+- **WHEN** an operation is `POST pets` with request body ContentKind = Json and a schema graph compatible with generated metadata
 - **THEN** the generated code creates `HttpRequestMessage` with `JsonContent.Create(body, mediaType: null, _jsonOptions)` as content
+
+#### Scenario: POST request with JSON body (unsupported schema)
+- **WHEN** an operation request body schema graph includes unsupported source-generation external kinds
+- **THEN** the generated code creates content with `JsonContent.Create(body)`
 
 #### Scenario: POST request with form-encoded body
 - **WHEN** an operation has request body ContentKind = FormUrlEncoded with schema properties `grant_type` (string, required) and `scope` (string, optional)
@@ -109,7 +117,8 @@ The system SHALL emit one `internal sealed partial class` per tag implementing t
 - **THEN** the generated code creates `MultipartFormDataContent`
 - **THEN** `file` is added as `new StreamContent(file), "file", fileName`
 - **THEN** `description` is added as `new StringContent(description), "description"` with null-check for optional properties
-- **THEN** `metadata` is added as `JsonContent.Create(metadata, mediaType: null, _jsonOptions), "metadata"` because the encoding specifies application/json
+- **THEN** `metadata` uses `JsonContent.Create(metadata, mediaType: null, _jsonOptions)` when metadata schema graph is compatible
+- **THEN** `metadata` uses `JsonContent.Create(metadata)` when metadata schema graph is unsupported for generated metadata
 - **THEN** `using var content = new MultipartFormDataContent()` disposes the multipart content after send
 
 #### Scenario: POST request with octet-stream body
@@ -121,10 +130,14 @@ The system SHALL emit one `internal sealed partial class` per tag implementing t
 - **WHEN** an operation has request body ContentKind = PlainText
 - **THEN** the generated code sets `request.Content = new StringContent(body, Encoding.UTF8, "text/plain")`
 
-#### Scenario: JSON response deserialization
-- **WHEN** a successful response has body type `Pet` and ContentKind = Json
-- **THEN** the generated code calls `response.Content.ReadFromJsonAsync<Pet>(_jsonOptions, cancellationToken)`
+#### Scenario: JSON response deserialization (compatible schema)
+- **WHEN** a successful response has ContentKind = Json and a schema graph compatible with generated metadata
+- **THEN** the generated code calls `response.Content.ReadFromJsonAsync<T>(_jsonOptions, cancellationToken)`
 - **THEN** `ConfigureAwait(false)` is on all awaits
+
+#### Scenario: JSON response deserialization (unsupported schema)
+- **WHEN** a successful response has ContentKind = Json and a schema graph with unsupported source-generation external kinds
+- **THEN** the generated code calls `response.Content.ReadFromJsonAsync<T>(cancellationToken)`
 
 #### Scenario: Content-Type validation before JSON deserialization
 - **WHEN** a response is expected to be JSON (ContentKind = Json) and the response status is 2xx

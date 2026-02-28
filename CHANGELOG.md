@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ProblemDetails and ValidationProblemDetails now respect type reuse — when the schema has `x-apistitch-type` and matches include config, no local type is generated and the FQN is used in ApiException and client error handling
 - Info-level diagnostics (AS408, AS409, AS500, AS501) no longer display as "warning" in CLI output
 - `--project` CLI option now shows step-by-step progress (Building... / Extracting...) and description clarifies it will build and run the project
+- JSON metadata/runtime fallback selection now uses semantic schema capabilities (`ExternalTypeKind`) instead of C# type-name pattern matching, across request bodies, response bodies, multipart JSON parts, and JsonSerializerContext emission
+- Schemas with unrepresentable `oneOf`/`anyOf`/`not` composition now conservatively fall back to runtime JSON APIs to keep generated clients buildable and behavior consistent
 
 ## 0.1.0-alpha.3 — 2026-02-27
 

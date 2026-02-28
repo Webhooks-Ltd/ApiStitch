@@ -37,6 +37,7 @@ public class OperationTransformer
     private static IOpenApiSchema ResolveRef(IOpenApiSchema schema) => OpenApiSchemaHelpers.ResolveRef(schema);
     private static JsonSchemaType? GetBaseType(IOpenApiSchema schema) => OpenApiSchemaHelpers.GetBaseType(schema);
     private static bool IsNullable(IOpenApiSchema schema) => OpenApiSchemaHelpers.IsNullable(schema);
+    private static bool HasUnrepresentableCompositionKeywords(IOpenApiSchema schema) => OpenApiSchemaHelpers.HasUnrepresentableCompositionKeywords(schema);
 
     private (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformAll(OpenApiDocument document)
     {
@@ -325,6 +326,7 @@ public class OperationTransformer
                 OriginalName = paramName,
                 Kind = SchemaKind.Array,
                 ArrayItemSchema = itemSchema,
+                HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                 Source = specPath,
             };
         }
@@ -337,6 +339,7 @@ public class OperationTransformer
             Kind = SchemaKind.Primitive,
             PrimitiveType = primitiveType,
             IsNullable = IsNullable(resolved),
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
             Source = specPath,
         };
     }
@@ -627,6 +630,7 @@ public class OperationTransformer
                 OriginalName = name,
                 Kind = SchemaKind.Object,
                 Properties = [],
+                HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                 Source = specPath,
             };
 
@@ -658,6 +662,7 @@ public class OperationTransformer
                         OriginalName = propName,
                         Kind = SchemaKind.Primitive,
                         PrimitiveType = PrimitiveType.Stream,
+                        HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedProp),
                         Source = specPath,
                     };
                 }
@@ -675,6 +680,7 @@ public class OperationTransformer
                     OriginalName = propName,
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = PrimitiveType.Stream,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedProp),
                     Source = specPath,
                 };
             }
@@ -687,6 +693,7 @@ public class OperationTransformer
                     OriginalName = propName,
                     Kind = SchemaKind.Array,
                     ArrayItemSchema = itemSchema,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedProp),
                     Source = specPath,
                 };
             }
@@ -700,6 +707,7 @@ public class OperationTransformer
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = prim ?? PrimitiveType.String,
                     IsNullable = IsNullable(resolvedProp),
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedProp),
                     Source = specPath,
                 };
             }
@@ -719,6 +727,7 @@ public class OperationTransformer
             OriginalName = name,
             Kind = SchemaKind.Object,
             Properties = properties,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
             Source = specPath,
         };
     }
@@ -743,6 +752,7 @@ public class OperationTransformer
                     OriginalName = itemMapped.OriginalName,
                     Kind = SchemaKind.Array,
                     ArrayItemSchema = itemMapped,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
                 };
             }
@@ -758,6 +768,7 @@ public class OperationTransformer
                     OriginalName = typeName,
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = itemPrimitive,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedItems),
                     Source = specPath,
                 };
                 return new ApiSchema
@@ -766,6 +777,7 @@ public class OperationTransformer
                     OriginalName = "array",
                     Kind = SchemaKind.Array,
                     ArrayItemSchema = primSchema,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
                 };
             }
@@ -916,6 +928,7 @@ public class OperationTransformer
                     OriginalName = itemMapped.OriginalName,
                     Kind = SchemaKind.Array,
                     ArrayItemSchema = itemMapped,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
                 };
             }
@@ -931,6 +944,7 @@ public class OperationTransformer
                     OriginalName = typeName,
                     Kind = SchemaKind.Primitive,
                     PrimitiveType = itemPrimitive,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedItems),
                     Source = specPath,
                 };
                 return new ApiSchema
@@ -939,6 +953,7 @@ public class OperationTransformer
                     OriginalName = "array",
                     Kind = SchemaKind.Array,
                     ArrayItemSchema = primSchema,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
                 };
             }

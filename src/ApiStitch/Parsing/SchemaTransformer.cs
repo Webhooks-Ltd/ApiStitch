@@ -16,6 +16,7 @@ public class SchemaTransformer
     private static IOpenApiSchema ResolveRef(IOpenApiSchema schema) => OpenApiSchemaHelpers.ResolveRef(schema);
     private static JsonSchemaType? GetBaseType(IOpenApiSchema schema) => OpenApiSchemaHelpers.GetBaseType(schema);
     private static bool IsNullable(IOpenApiSchema schema) => OpenApiSchemaHelpers.IsNullable(schema);
+    private static bool HasUnrepresentableCompositionKeywords(IOpenApiSchema schema) => OpenApiSchemaHelpers.HasUnrepresentableCompositionKeywords(schema);
 
     /// <summary>
     /// Transforms OpenAPI component schemas into the ApiStitch semantic model.
@@ -122,6 +123,7 @@ public class SchemaTransformer
             AdditionalPropertiesSchema = openApiSchema.AdditionalProperties?.Type != null
                 ? GetOrTransformPropertySchema(openApiSchema.AdditionalProperties, name, "additionalProperties", source)
                 : null,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(openApiSchema),
             Source = source,
         };
 
@@ -182,6 +184,7 @@ public class SchemaTransformer
             EnumValues = members,
             IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(openApiSchema),
             Source = source,
         };
     }
@@ -203,6 +206,7 @@ public class SchemaTransformer
             ArrayItemSchema = itemSchema,
             IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(openApiSchema),
             Source = source,
         };
     }
@@ -220,6 +224,7 @@ public class SchemaTransformer
             PrimitiveType = primitiveType,
             IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(openApiSchema),
             Source = source,
         };
     }
@@ -234,6 +239,7 @@ public class SchemaTransformer
             Description = openApiSchema.Description,
             IsNullable = IsNullable(openApiSchema),
             IsDeprecated = openApiSchema.Deprecated,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(openApiSchema),
             Source = source,
         };
 
@@ -365,6 +371,7 @@ public class SchemaTransformer
                 ArrayItemSchema = itemSchema,
                 IsNullable = IsNullable(resolved),
                 IsDeprecated = resolved.Deprecated,
+                HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                 Source = source,
             };
             _schemaMap[resolved] = arraySchema;
@@ -391,6 +398,7 @@ public class SchemaTransformer
             IsNullable = IsNullable(resolved),
             IsDeprecated = resolved.Deprecated,
             Description = resolved.Description,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
             Source = source,
         };
         _schemaMap[resolved] = primitiveSchema;
