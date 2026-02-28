@@ -51,7 +51,80 @@ jobs:
           name: nuget-packages
           path: ./artifacts/*
 
-      - name: Create GitHub release
+      - name: Extract release notes from changelog
+        id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          version = os.environ["VERSION"]
+          changelog = pathlib.Path("CHANGELOG.md")
+          notes = pathlib.Path("release_notes.md")
+          output_path = os.environ["GITHUB_OUTPUT"]
+
+          def write_output(name: str, value: str) -> None:
+              with open(output_path, "a", encoding="utf-8") as out:
+                  out.write(f"{name}={value}\n")
+
+          if not changelog.exists():
+              write_output("HAS_CHANGELOG_NOTES", "false")
+              sys.exit(0)
+
+          lines = changelog.read_text(encoding="utf-8").splitlines()
+          section_header = re.compile(rf"^##\s+\[?{re.escape(version)}\]?(?:\s+—.*)?\s*$")
+          next_header = re.compile(r"^##\s+")
+
+          start = None
+          for i, line in enumerate(lines):
+              if section_header.match(line):
+                  start = i
+                  break
+
+          if start is None:
+              write_output("HAS_CHANGELOG_NOTES", "false")
+              sys.exit(0)
+
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if next_header.match(lines[i]):
+                  end = i
+                  break
+
+          section_lines = lines[start + 1:end]
+          while section_lines and section_lines[0].strip() == "":
+              section_lines.pop(0)
+          while section_lines and section_lines[-1].strip() == "":
+              section_lines.pop()
+
+          content = "\n".join(section_lines).strip()
+          if not content:
+              write_output("HAS_CHANGELOG_NOTES", "false")
+              sys.exit(0)
+
+          notes.write_text(content + "\n", encoding="utf-8")
+          write_output("HAS_CHANGELOG_NOTES", "true")
+          PY
+
+      - name: Create GitHub release from changelog
+        if: steps.changelog.outputs.HAS_CHANGELOG_NOTES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: >
+          gh release create "$TAG"
+          ./artifacts/*.nupkg
+          --repo "${{ github.repository }}"
+          --title "$TAG"
+          --notes-file ./release_notes.md
+          ${{ steps.version.outputs.PRERELEASE == 'true' && '--prerelease' || '' }}
+
+      - name: Create GitHub release with generated notes
+        if: steps.changelog.outputs.HAS_CHANGELOG_NOTES != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
