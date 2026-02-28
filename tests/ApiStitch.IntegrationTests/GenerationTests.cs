@@ -245,15 +245,22 @@ public class GenerationTests
         Assert.DoesNotContain(result.Files, f => f.RelativePath == "Pet.cs");
         Assert.DoesNotContain(result.Files, f => f.RelativePath == "PetStatus.cs");
         Assert.DoesNotContain(result.Files, f => f.RelativePath == "Category.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "JsonPatchDocument.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "CreatePetRequest.cs");
 
         var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
         Assert.Contains("SampleApi.Models.Pet", contextFile.Content);
         Assert.Contains("SampleApi.Models.PetStatus", contextFile.Content);
         Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
+        Assert.DoesNotContain("Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument", contextFile.Content);
         Assert.Contains("CreatePetRequest", contextFile.Content);
 
         Assert.Contains("IReadOnlyList<SampleApi.Models.Pet>", contextFile.Content);
+
+        var petsClientFile = result.Files.First(f => f.RelativePath.EndsWith("PetsClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("PatchPetAsync", petsClientFile.Content);
+        Assert.Contains("JsonPatchDocument<SampleApi.Models.Pet>", petsClientFile.Content);
+        Assert.Contains("request.Content = JsonContent.Create(body);", petsClientFile.Content);
 
         var requestFile = result.Files.First(f => f.RelativePath == "CreatePetRequest.cs");
         Assert.Contains("partial record CreatePetRequest", requestFile.Content);
@@ -361,6 +368,80 @@ public class GenerationTests
         var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
         Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
         Assert.Contains("Microsoft.AspNetCore.Http.HttpValidationProblemDetails", contextFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_WrappedJsonPatch_SkipsJsonContextMetadata_AndUsesRuntimeJsonContent()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-json-patch-wrapped.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.DoesNotContain("Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument", contextFile.Content);
+
+        var patchesClientFile = result.Files.First(f => f.RelativePath.EndsWith("PatchesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("IReadOnlyList<Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>>", patchesClientFile.Content);
+        Assert.Contains("request.Content = JsonContent.Create(body);", patchesClientFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_WrapperObjectWithJsonPatch_UsesRuntimeJsonContent_AndSkipsWrapperContextMetadata()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-json-patch-wrapper-object.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.DoesNotContain("Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument", contextFile.Content);
+        Assert.DoesNotContain("PatchWrapper", contextFile.Content);
+
+        var patchesClientFile = result.Files.First(f => f.RelativePath.EndsWith("PatchesClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("PatchWrapper body", patchesClientFile.Content);
+        Assert.Contains("request.Content = JsonContent.Create(body);", patchesClientFile.Content);
+        Assert.Contains("ReadFromJsonAsync<PatchWrapper>(", patchesClientFile.Content);
+        Assert.Contains("cancellationToken).ConfigureAwait(false))!;", patchesClientFile.Content);
+        Assert.DoesNotContain("ReadFromJsonAsync<PatchWrapper>(\n            _jsonOptions, cancellationToken)", patchesClientFile.Content);
+    }
+
+    [Fact]
+    public void TypeReuse_MultipartJsonPatchPart_UsesRuntimeJsonContent()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("type-reuse-json-patch-multipart.yaml"),
+            Namespace = "Generated.Models",
+            TypeReuse = new TypeReuseConfig
+            {
+                IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
+            },
+        };
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var uploadsClientFile = result.Files.First(f => f.RelativePath.EndsWith("UploadsClient.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("JsonPatchDocument<SampleApi.Models.Pet>", uploadsClientFile.Content);
+        Assert.Contains("content.Add(JsonContent.Create(patch), \"patch\");", uploadsClientFile.Content);
+        Assert.DoesNotContain("content.Add(JsonContent.Create(patch, mediaType: null, _jsonOptions), \"patch\");", uploadsClientFile.Content);
     }
 
     [Fact]

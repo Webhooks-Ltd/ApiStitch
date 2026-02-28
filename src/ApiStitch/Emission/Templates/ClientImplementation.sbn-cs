@@ -86,7 +86,11 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
 {{~ end ~}}
 {{~ end ~}}
 {{~ if op.body_content_kind == "json" ~}}
+{{~ if op.body_use_json_options ~}}
         request.Content = JsonContent.Create({{ op.body_param_name }}, mediaType: null, _jsonOptions);
+{{~ else ~}}
+        request.Content = JsonContent.Create({{ op.body_param_name }});
+{{~ end ~}}
 {{~ else if op.body_content_kind == "formurlencoded" ~}}
         var formFields = new List<KeyValuePair<string, string?>>();
 {{~ for field in op.form_fields ~}}
@@ -108,10 +112,18 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             content.Add(new StreamContent({{ part.param_name }}), "{{ part.wire_name }}", {{ part.file_name_param_name }} ?? "file");
 {{~ else if part.has_json_encoding ~}}
 {{~ if part.is_required ~}}
+{{~ if part.use_json_options ~}}
         content.Add(JsonContent.Create({{ part.param_name }}, mediaType: null, _jsonOptions), "{{ part.wire_name }}");
 {{~ else ~}}
+        content.Add(JsonContent.Create({{ part.param_name }}), "{{ part.wire_name }}");
+{{~ end ~}}
+{{~ else ~}}
         if ({{ part.param_name }} is not null)
+{{~ if part.use_json_options ~}}
             content.Add(JsonContent.Create({{ part.param_name }}, mediaType: null, _jsonOptions), "{{ part.wire_name }}");
+{{~ else ~}}
+            content.Add(JsonContent.Create({{ part.param_name }}), "{{ part.wire_name }}");
+{{~ end ~}}
 {{~ end ~}}
 {{~ else ~}}
 {{~ if part.is_required ~}}
@@ -166,8 +178,13 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
                 response.Headers);
         }
 {{~ end ~}}
+{{~ if op.response_use_json_options ~}}
         return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
             _jsonOptions, cancellationToken).ConfigureAwait(false))!;
+{{~ else ~}}
+        return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
+            cancellationToken).ConfigureAwait(false))!;
+{{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}
     }

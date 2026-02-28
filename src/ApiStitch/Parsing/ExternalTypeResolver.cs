@@ -56,6 +56,7 @@ public static class ExternalTypeResolver
             }
 
             schema.ExternalClrTypeName = mapped;
+            schema.ExternalTypeKind = ClassifyExternalType(mapped);
 
             diagnostics.Add(new Diagnostic(DiagnosticSeverity.Info, DiagnosticCodes.TypeReused,
                 $"Type '{hint}' reused as '{mapped}'. No code will be generated.",
@@ -67,4 +68,21 @@ public static class ExternalTypeResolver
 
     private static List<Regex> BuildPatterns(List<string> globs) =>
         globs.Select(p => new Regex("^" + Regex.Escape(p).Replace("\\*", ".*") + "$", RegexOptions.CultureInvariant)).ToList();
+
+    private static ExternalTypeKind ClassifyExternalType(string clrType)
+    {
+        var rootType = GetRootType(clrType);
+
+        return rootType switch
+        {
+            "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument" => ExternalTypeKind.JsonPatchDocument,
+            _ => ExternalTypeKind.None,
+        };
+    }
+
+    private static string GetRootType(string clrType)
+    {
+        var genericStart = clrType.IndexOf('<');
+        return genericStart >= 0 ? clrType[..genericStart] : clrType;
+    }
 }

@@ -11,6 +11,7 @@ obj/
 *.snupkg
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
+.nuget-packages/
 
 ## Build results
 [Dd]ebug/

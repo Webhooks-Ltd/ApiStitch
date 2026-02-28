@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: Multipart JsonPatch Type Reuse API
+  version: 1.0.0
+paths:
+  /patch-upload:
+    post:
+      operationId: uploadPatch
+      tags: [Uploads]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [patch]
+              properties:
+                patch:
+                  $ref: '#/components/schemas/JsonPatchDocument'
+            encoding:
+              patch:
+                contentType: application/json
+      responses:
+        "204":
+          description: No Content
+components:
+  schemas:
+    JsonPatchDocument:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>
+      properties:
+        operations:
+          type: array
+          items:
+            type: object

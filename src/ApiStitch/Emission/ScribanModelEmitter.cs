@@ -132,7 +132,18 @@ public class ScribanModelEmitter : IModelEmitter
         var lastSegment = config.Namespace.Split('.').Last();
         var contextName = $"{lastSegment}JsonContext";
 
-        var collectionTypes = spec.CollectionTypes
+        var excludedTypeNames = spec.Schemas
+            .Where(JsonSerializationCompatibility.ContainsUnsupportedSourceGenerationType)
+            .Select(GetSchemaTypeName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var jsonSerializableTypes = typeNames
+            .Where(n => !excludedTypeNames.Contains(n))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        var jsonSerializableCollections = spec.CollectionTypes
+            .Where(JsonSerializationCompatibility.ShouldGenerateJsonMetadata)
             .Select(s => s.CSharpTypeName ?? CSharpTypeMapper.MapSchema(s))
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
@@ -140,9 +151,9 @@ public class ScribanModelEmitter : IModelEmitter
         var model = new ScriptObject();
         model.Add("namespace", config.Namespace);
         model.Add("context_name", contextName);
-        model.Add("type_names", typeNames.OrderBy(n => n, StringComparer.Ordinal).ToList());
-        model.Add("collection_types", collectionTypes);
-        model.Add("has_collections", collectionTypes.Count > 0);
+        model.Add("type_names", jsonSerializableTypes);
+        model.Add("collection_types", jsonSerializableCollections);
+        model.Add("has_collections", jsonSerializableCollections.Count > 0);
 
         var context = new TemplateContext();
         context.PushGlobal(model);
@@ -178,6 +189,13 @@ public class ScribanModelEmitter : IModelEmitter
             };
         }
         return false;
+    }
+
+    private static string GetSchemaTypeName(ApiSchema schema)
+    {
+        return schema.IsExternal
+            ? schema.CSharpTypeName ?? CSharpTypeMapper.MapSchema(schema)
+            : schema.Name;
     }
 
     private static Template LoadTemplate(string name)

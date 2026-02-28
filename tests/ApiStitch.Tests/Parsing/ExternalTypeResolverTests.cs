@@ -59,6 +59,20 @@ public class ExternalTypeResolverTests
         ExternalTypeResolver.Resolve(spec, MakeConfig(includeNamespaces: ["SampleApi.Models.*"]));
 
         Assert.Equal("SampleApi.Models.Pet", schema.ExternalClrTypeName);
+        Assert.Equal(ExternalTypeKind.None, schema.ExternalTypeKind);
+        Assert.True(schema.IsExternal);
+    }
+
+    [Fact]
+    public void JsonPatchDocumentType_IsClassified()
+    {
+        var schema = MakeSchema("JsonPatchDocument", "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>");
+        var spec = MakeSpec(schema);
+
+        ExternalTypeResolver.Resolve(spec, MakeConfig(includeNamespaces: ["Microsoft.*"]));
+
+        Assert.Equal("Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>", schema.ExternalClrTypeName);
+        Assert.Equal(ExternalTypeKind.JsonPatchDocument, schema.ExternalTypeKind);
         Assert.True(schema.IsExternal);
     }
 

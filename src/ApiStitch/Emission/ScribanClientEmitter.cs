@@ -186,9 +186,11 @@ public class ScribanClientEmitter : IClientEmitter
                 has_query_params = hasQueryParams,
                 body_content_kind = bodyModel.content_kind,
                 body_param_name = bodyModel.param_name,
+                body_use_json_options = bodyModel.use_json_options,
                 form_fields = bodyModel.form_fields,
                 multipart_parts = bodyModel.multipart_parts,
                 response_content_kind = responseModel.content_kind,
+                response_use_json_options = responseModel.use_json_options,
                 accept_header = acceptHeader,
                 parameters = allParams,
                 query_params = queryParams,
@@ -205,6 +207,7 @@ public class ScribanClientEmitter : IClientEmitter
         {
             content_kind = (string?)null,
             param_name = (string?)null,
+            use_json_options = true,
             form_fields = (List<object>?)null,
             multipart_parts = (List<object>?)null,
         };
@@ -221,6 +224,7 @@ public class ScribanClientEmitter : IClientEmitter
             case ContentKind.Json:
             {
                 var typeName = GetTypeName(requestBody.Schema);
+                var useJsonOptions = JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(requestBody.Schema);
                 bodyParams.Add(new
                 {
                     type_name = typeName,
@@ -233,6 +237,7 @@ public class ScribanClientEmitter : IClientEmitter
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
+                    use_json_options = useJsonOptions,
                     form_fields = (List<object>?)null,
                     multipart_parts = (List<object>?)null,
                 }, bodyParams);
@@ -265,6 +270,7 @@ public class ScribanClientEmitter : IClientEmitter
                 {
                     content_kind = contentKind,
                     param_name = (string?)null,
+                    use_json_options = true,
                     form_fields = (List<object>?)formFields,
                     multipart_parts = (List<object>?)null,
                 }, bodyParams);
@@ -279,6 +285,7 @@ public class ScribanClientEmitter : IClientEmitter
                     var paramName = ToCamelCase(prop.CSharpName);
                     var hasJsonEncoding = requestBody.PropertyEncodings?.TryGetValue(prop.Name, out var enc) == true
                         && enc.ContentType.Contains("json", StringComparison.OrdinalIgnoreCase);
+                    var useJsonOptions = !hasJsonEncoding || JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(prop.Schema);
 
                     if (!prop.IsRequired)
                         typeName += "?";
@@ -310,6 +317,7 @@ public class ScribanClientEmitter : IClientEmitter
                         param_name = paramName,
                         is_binary = isBinary,
                         has_json_encoding = hasJsonEncoding,
+                        use_json_options = useJsonOptions,
                         file_name_param_name = fileNameParamName,
                         is_required = prop.IsRequired,
                     });
@@ -319,6 +327,7 @@ public class ScribanClientEmitter : IClientEmitter
                 {
                     content_kind = contentKind,
                     param_name = (string?)null,
+                    use_json_options = true,
                     form_fields = (List<object>?)null,
                     multipart_parts = (List<object>?)parts,
                 }, bodyParams);
@@ -337,6 +346,7 @@ public class ScribanClientEmitter : IClientEmitter
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
+                    use_json_options = true,
                     form_fields = (List<object>?)null,
                     multipart_parts = (List<object>?)null,
                 }, bodyParams);
@@ -355,6 +365,7 @@ public class ScribanClientEmitter : IClientEmitter
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
+                    use_json_options = true,
                     form_fields = (List<object>?)null,
                     multipart_parts = (List<object>?)null,
                 }, bodyParams);
@@ -371,21 +382,22 @@ public class ScribanClientEmitter : IClientEmitter
 
         if (!hasResponseBody)
         {
-            return ("Task", null, new { content_kind = (string?)null });
+            return ("Task", null, new { content_kind = (string?)null, use_json_options = true });
         }
 
         if (successResponse!.ContentKind == ContentKind.OctetStream)
         {
-            return ("Task<FileResponse>", "FileResponse", new { content_kind = contentKind });
+            return ("Task<FileResponse>", "FileResponse", new { content_kind = contentKind, use_json_options = true });
         }
 
         if (successResponse.ContentKind == ContentKind.PlainText)
         {
-            return ("Task<string>", "string", new { content_kind = contentKind });
+            return ("Task<string>", "string", new { content_kind = contentKind, use_json_options = true });
         }
 
+        var useJsonOptions = JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(successResponse.Schema!);
         var responseType = GetTypeName(successResponse.Schema!);
-        return ($"Task<{responseType}>", responseType, new { content_kind = contentKind });
+        return ($"Task<{responseType}>", responseType, new { content_kind = contentKind, use_json_options = useJsonOptions });
     }
 
     private static string ToCamelCase(string pascal)

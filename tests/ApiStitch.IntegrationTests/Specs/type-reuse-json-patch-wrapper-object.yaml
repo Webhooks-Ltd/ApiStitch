@@ -1,0 +1,52 @@
+openapi: 3.0.3
+info:
+  title: Wrapper JsonPatch Type Reuse API
+  version: 1.0.0
+paths:
+  /patch-wrapper:
+    post:
+      operationId: applyWrappedPatch
+      tags: [Patches]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchWrapper'
+      responses:
+        "204":
+          description: No Content
+  /patch-wrapper/{id}:
+    get:
+      operationId: getWrappedPatch
+      tags: [Patches]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatchWrapper'
+components:
+  schemas:
+    PatchWrapper:
+      type: object
+      required: [patch]
+      properties:
+        patch:
+          $ref: '#/components/schemas/JsonPatchDocument'
+    JsonPatchDocument:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>
+      properties:
+        operations:
+          type: array
+          items:
+            type: object

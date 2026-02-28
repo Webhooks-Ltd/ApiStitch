@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Wrapped JsonPatch Type Reuse API
+  version: 1.0.0
+paths:
+  /patches:
+    post:
+      operationId: applyPetPatches
+      tags: [Patches]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/JsonPatchDocument'
+      responses:
+        "204":
+          description: No Content
+components:
+  schemas:
+    JsonPatchDocument:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>
+      properties:
+        operations:
+          type: array
+          items:
+            type: object

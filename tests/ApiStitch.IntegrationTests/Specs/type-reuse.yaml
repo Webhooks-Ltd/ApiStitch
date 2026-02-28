@@ -32,6 +32,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pet'
+  /pets/{id}:
+    patch:
+      operationId: patchPet
+      tags: [Pets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json-patch+json:
+            schema:
+              $ref: '#/components/schemas/JsonPatchDocument'
+      responses:
+        "204":
+          description: No Content
 components:
   schemas:
     Pet:
@@ -62,3 +82,11 @@ components:
       properties:
         title:
           type: string
+    JsonPatchDocument:
+      type: object
+      x-apistitch-type: Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<SampleApi.Models.Pet>
+      properties:
+        operations:
+          type: array
+          items:
+            type: object
