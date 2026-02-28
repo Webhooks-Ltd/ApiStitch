@@ -10,6 +10,7 @@ public class ScribanClientEmitterTests
     {
         Spec = "test.yaml",
         Namespace = "TestApi.Generated",
+        OutputStyle = OutputStyle.TypedClientFlat,
     };
 
     private static ApiSpecification CreateSpec(
@@ -305,6 +306,66 @@ public class ScribanClientEmitterTests
     }
 
     [Fact]
+    public void QueryParameterOrder_PreservesSpecOrderInMethodSignature()
+    {
+        var stringSchema = new ApiSchema
+        {
+            Name = "string",
+            OriginalName = "string",
+            Kind = SchemaKind.Primitive,
+            PrimitiveType = PrimitiveType.String,
+            CSharpTypeName = "string",
+        };
+
+        var op = new ApiOperation
+        {
+            OperationId = "loginUser",
+            Path = "user/login",
+            HttpMethod = ApiHttpMethod.Get,
+            Tag = "User",
+            CSharpMethodName = "LoginUserAsync",
+            Parameters =
+            [
+                new ApiParameter
+                {
+                    Name = "username",
+                    CSharpName = "username",
+                    Location = ParameterLocation.Query,
+                    Schema = stringSchema,
+                    IsRequired = false,
+                    Style = ParameterStyle.Form,
+                    Explode = true,
+                },
+                new ApiParameter
+                {
+                    Name = "password",
+                    CSharpName = "password",
+                    Location = ParameterLocation.Query,
+                    Schema = stringSchema,
+                    IsRequired = false,
+                    Style = ParameterStyle.Form,
+                    Explode = true,
+                },
+            ],
+            SuccessResponse = new ApiResponse
+            {
+                StatusCode = 200,
+                ContentKind = ContentKind.Json,
+                MediaType = "application/json",
+                Schema = stringSchema,
+            },
+        };
+
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op]), DefaultConfig);
+
+        var contract = result.Files.First(f => f.RelativePath == "ITestApiUserClient.cs");
+        Assert.Contains("LoginUserAsync(string? username = null, string? password = null, CancellationToken cancellationToken = default)", contract.Content);
+
+        var impl = result.Files.First(f => f.RelativePath == "TestApiUserClient.cs");
+        Assert.Contains("LoginUserAsync(string? username = null, string? password = null, CancellationToken cancellationToken = default)", impl.Content);
+    }
+
+    [Fact]
     public void ExternalEnumQueryParam_NoExtensionsFile_UsesToString()
     {
         var statusSchema = new ApiSchema
@@ -576,6 +637,72 @@ public class ScribanClientEmitterTests
     }
 
     [Fact]
+    public void JsonStringResponse_EmitsTolerantStringFallbackPath()
+    {
+        var stringSchema = new ApiSchema { Name = "response", OriginalName = "response", Kind = SchemaKind.Primitive, PrimitiveType = PrimitiveType.String, CSharpTypeName = "string" };
+        var op = new ApiOperation
+        {
+            OperationId = "loginUser", Path = "user/login", HttpMethod = ApiHttpMethod.Get, Tag = "User", CSharpMethodName = "LoginUserAsync",
+            SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = stringSchema },
+        };
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op]), DefaultConfig);
+        var impl = result.Files.First(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.Contains("var rawResponse = await response.Content.ReadAsStringAsync", impl.Content);
+        Assert.Contains("JsonSerializer.Deserialize<string>(trimmedRawResponse", impl.Content);
+        Assert.Contains("return rawResponse;", impl.Content);
+        Assert.DoesNotContain("ReadFromJsonAsync<string>", impl.Content);
+    }
+
+    [Fact]
+    public void OptionalJsonBody_EmitsNullableBodyParameter()
+    {
+        var userSchema = CreateSchema("User");
+        var userListSchema = new ApiSchema
+        {
+            Name = "UserList",
+            OriginalName = "userList",
+            Kind = SchemaKind.Array,
+            ArrayItemSchema = userSchema,
+        };
+
+        var createUser = new ApiOperation
+        {
+            OperationId = "createUser", Path = "user", HttpMethod = ApiHttpMethod.Post, Tag = "User", CSharpMethodName = "CreateUserAsync",
+            RequestBody = new ApiRequestBody
+            {
+                Schema = userSchema,
+                IsRequired = false,
+                ContentKind = ContentKind.Json,
+                MediaType = "application/json",
+            },
+            SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = userSchema },
+        };
+
+        var createUsers = new ApiOperation
+        {
+            OperationId = "createUsersWithListInput", Path = "user/createWithList", HttpMethod = ApiHttpMethod.Post, Tag = "User", CSharpMethodName = "CreateUsersWithListInputAsync",
+            RequestBody = new ApiRequestBody
+            {
+                Schema = userListSchema,
+                IsRequired = false,
+                ContentKind = ContentKind.Json,
+                MediaType = "application/json",
+            },
+            SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = userSchema },
+        };
+
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [createUser, createUsers]), DefaultConfig);
+
+        var contract = result.Files.First(f => f.RelativePath == "ITestApiUserClient.cs");
+        Assert.Contains("Task<User> CreateUserAsync(User? body = null", contract.Content);
+        Assert.Contains("Task<User> CreateUsersWithListInputAsync(IReadOnlyList<User>? body = null", contract.Content);
+
+        var impl = result.Files.First(f => f.RelativePath == "TestApiUserClient.cs");
+        Assert.Contains("Task<User> CreateUserAsync(User? body = null", impl.Content);
+        Assert.Contains("Task<User> CreateUsersWithListInputAsync(IReadOnlyList<User>? body = null", impl.Content);
+    }
+
+    [Fact]
     public void AcceptHeader_EmittedForResponseBody()
     {
         var petSchema = CreateSchema("Pet");
@@ -637,6 +764,7 @@ public class ScribanClientEmitterTests
         Assert.DoesNotContain("Deserialize<ProblemDetails>", impl.Content);
         var exceptionFile = result.Files.First(f => f.RelativePath == "ApiException.cs");
         Assert.DoesNotContain("ProblemDetails? Problem", exceptionFile.Content);
+        Assert.DoesNotContain("Structured problem details from the response", exceptionFile.Content);
     }
 
     [Fact]
@@ -650,5 +778,32 @@ public class ScribanClientEmitterTests
         };
         var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op]), DefaultConfig);
         Assert.DoesNotContain(result.Files, f => f.RelativePath == "FileResponse.cs");
+    }
+
+    [Fact]
+    public void StructuredLayout_RoutesClientFilesToExpectedFolders()
+    {
+        var petSchema = CreateSchema("Pet");
+        var op = new ApiOperation
+        {
+            OperationId = "getPet", Path = "pets", HttpMethod = ApiHttpMethod.Get, Tag = "Pets", CSharpMethodName = "GetPetAsync",
+            SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = petSchema },
+        };
+
+        var config = new ApiStitchConfig
+        {
+            Spec = DefaultConfig.Spec,
+            Namespace = DefaultConfig.Namespace,
+            OutputStyle = OutputStyle.TypedClientStructured,
+        };
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op], hasProblemDetailsSupport: true), config);
+
+        Assert.Contains(result.Files, f => f.RelativePath == "Contracts/ITestApiPetsClient.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Clients/TestApiPetsClient.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Infrastructure/ApiException.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Infrastructure/ProblemDetails.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiClientOptions.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiJsonOptions.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiServiceCollectionExtensions.cs");
     }
 }

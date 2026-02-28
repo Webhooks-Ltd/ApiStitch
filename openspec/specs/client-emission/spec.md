@@ -364,19 +364,42 @@ The system SHALL implement `ScribanClientEmitter` as a separate class implementi
 
 ### Requirement: Emit one file per generated type
 
-The system SHALL emit each client-side type as a separate `.cs` file with `[GeneratedCode("ApiStitch")]`, file-scoped namespace, `#nullable enable`, and the necessary `using` directives (e.g., `System.Net.Http`, `System.Net.Http.Json`, `System.Net.Http.Headers`, `System.Text`, `System.Text.Json`, `System.CodeDom.Compiler`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Http` as applicable to each file).
+The emitter SHALL produce one C# file per generated type.
 
-#### Scenario: File inventory for single-tag API
-- **WHEN** an API named "PetStoreApi" has one tag "Pets"
-- **THEN** the emitter produces: `IPetStoreApiPetsClient.cs`, `PetStoreApiPetsClient.cs`, `PetStoreApiServiceCollectionExtensions.cs`, `ApiException.cs`, `PetStoreApiClientOptions.cs`, `PetStoreApiJsonOptions.cs`
+Shared infrastructure files SHALL include:
+- `ApiException.cs`
+- `{ClientName}ClientOptions.cs`
+- `{ClientName}JsonOptions.cs`
+- `{ClientName}ServiceCollectionExtensions.cs`
 
-#### Scenario: File inventory for multi-tag API
-- **WHEN** an API has tags "Pets" and "Store"
-- **THEN** the emitter produces interface + implementation files for each tag, plus the shared files (DI, options, exception, JSON options)
+For each tag group, emitter SHALL produce:
+- interface file (`I{ClientName}{Tag}Client.cs` or `I{ClientName}Client.cs` for default tag)
+- implementation file (`{ClientName}{Tag}Client.cs` or `{ClientName}Client.cs` for default tag)
 
-#### Scenario: Files are sorted alphabetically
-- **WHEN** the emitter returns generated files
-- **THEN** the files are ordered alphabetically by file name for deterministic output
+When output style is `TypedClientStructured`, relative paths SHALL be foldered as follows:
+- `Contracts/` for interfaces
+- `Clients/` for client implementations and `FileResponse.cs`
+- `Infrastructure/` for `ApiException.cs` and `ProblemDetails.cs`
+- `Configuration/` for options/json/service-collection/extensions support files
+
+When output style is `TypedClientFlat`, the same files SHALL be emitted at output root.
+
+#### Scenario: single-tag API with structured layout
+- **WHEN** spec has one tag group and output style is `TypedClientStructured`
+- **THEN** generated files include `Contracts/ITestApiPetsClient.cs`, `Clients/TestApiPetsClient.cs`, and shared files under `Configuration/` and `Infrastructure/`
+
+#### Scenario: multi-tag API with structured layout
+- **WHEN** spec has `Pets` and `Store` tag groups and output style is `TypedClientStructured`
+- **THEN** generated files include `Contracts/ITestApiPetsClient.cs`, `Clients/TestApiPetsClient.cs`, `Contracts/ITestApiStoreClient.cs`, `Clients/TestApiStoreClient.cs`
+- **THEN** shared files are emitted once under their mapped folders
+
+#### Scenario: single-tag API with flat layout
+- **WHEN** spec has one tag group and output style is `TypedClientFlat`
+- **THEN** generated files include `ITestApiPetsClient.cs`, `TestApiPetsClient.cs`, and shared files at output root
+
+#### Scenario: file inventory deterministic ordering
+- **WHEN** generation runs repeatedly with same input
+- **THEN** file relative paths and order are stable and deterministic within selected layout style
 
 ### Requirement: Produce deterministic, diff-friendly client output
 
@@ -438,4 +461,31 @@ The system SHALL conditionally emit a `public sealed record ProblemDetails` only
 #### Scenario: ProblemDetails emitted when problem+json exists
 - **WHEN** any non-2xx response advertises `application/problem+json`
 - **THEN** `ProblemDetails.cs` is emitted unless an external ProblemDetails type is selected
+
+### Requirement: Generate client methods for supported inline response schemas
+
+The system SHALL generate client methods for operations whose success responses use supported inline schemas (object/primitive/supported array forms).
+
+#### Scenario: Supported inline response object produces typed method
+- **WHEN** an operation has a supported inline object success response schema
+- **THEN** the generated client method is emitted with `Task<GeneratedInlineType>` return type
+- **THEN** the operation is not dropped from generated interfaces/implementations
+
+#### Scenario: Supported inline primitive response produces typed method
+- **WHEN** an operation has a supported inline primitive success response schema (for example `type: string`)
+- **THEN** the generated client method is emitted with the mapped primitive return type (for example `Task<string>`)
+- **THEN** the operation is not dropped from generated interfaces/implementations
+
+#### Scenario: JSON string response body is quoted
+- **WHEN** an operation success response type is `string` and response body is a valid quoted JSON string
+- **THEN** generated client returns the unquoted/unescaped string value
+
+#### Scenario: JSON string response body is unquoted raw text
+- **WHEN** an operation success response type is `string` and server returns unquoted raw text body despite JSON content-type
+- **THEN** generated client returns raw text instead of throwing deserialization failure
+
+#### Scenario: Unsupported inline response composition remains skipped
+- **WHEN** an operation success response uses unsupported inline composition
+- **THEN** the method is skipped
+- **THEN** warning diagnostic `AS401` remains emitted for that operation
 

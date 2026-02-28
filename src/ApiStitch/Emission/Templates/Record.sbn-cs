@@ -1,7 +1,7 @@
 #nullable enable
 using System;
 using System.CodeDom.Compiler;
-{{- if has_collections }}
+{{- if has_collections || has_additional_properties }}
 using System.Collections.Generic;
 {{- end }}
 {{- if has_additional_properties }}

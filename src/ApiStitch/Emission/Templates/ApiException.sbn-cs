@@ -42,10 +42,10 @@ public sealed class ApiException : HttpRequestException
     /// </summary>
     public HttpResponseHeaders? ResponseHeaders { get; }
 
+{{~ if has_problem_details ~}}
     /// <summary>
     /// Structured problem details from the response, if available.
     /// </summary>
-{{~ if has_problem_details ~}}
     public {{ problem_details_type }}? Problem { get; }
 {{~ end ~}}
 }

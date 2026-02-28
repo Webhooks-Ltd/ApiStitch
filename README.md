@@ -95,7 +95,7 @@ All options in `openapi-stitch.yaml`:
 | `project` | Path to `.csproj` that produces an OpenAPI spec at build time | |
 | `namespace` | C# namespace for generated types | `ApiStitch.Generated` |
 | `outputDir` | Output directory for generated files | `./Generated` |
-| `outputStyle` | Output style (`TypedClient`) | `TypedClient` |
+| `outputStyle` | Output style (`TypedClientStructured` or `TypedClientFlat`) | `TypedClientStructured` |
 | `clientName` | Client name override (derived from spec title if omitted) | |
 | `typeReuse.includeNamespaces` | Glob patterns for namespaces to reuse (e.g., `MyShared.Models.*`) | `[]` |
 | `typeReuse.includeTypes` | Exact fully-qualified type names to reuse | `[]` |
@@ -104,6 +104,11 @@ All options in `openapi-stitch.yaml`:
 | `typeReuse.namespaceMap` | Namespace remapping (e.g., `ProducerNs: ConsumerNs`) | `{}` |
 
 CLI flags (`--spec`, `--output`, `--namespace`, `--client-name`, `--output-style`) override the corresponding YAML values.
+
+`outputStyle` layouts:
+
+- `TypedClientStructured` (default): files are grouped into `Contracts/`, `Clients/`, `Models/`, `Infrastructure/`, and `Configuration/`
+- `TypedClientFlat`: all generated files are emitted at the output root
 
 For remote `spec` URLs, ApiStitch applies a bounded fetch policy (30s timeout, 10 MiB response limit, max 5 redirects) and reports fetch/URL errors via diagnostics.
 
@@ -143,7 +148,7 @@ Requires the .NET 10 SDK.
 ApiStitch is under active development. What works today:
 
 - CLI generation (`apistitch generate`)
-- TypedClient output style (interfaces + implementations + DI registration)
+- Configurable output layouts (`TypedClientStructured` default, `TypedClientFlat` opt-in)
 - Producer-side schema enrichment (`ApiStitch.OpenApi`)
 - Type reuse via include/exclude whitelist
 - Namespace remapping

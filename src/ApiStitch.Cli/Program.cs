@@ -10,7 +10,7 @@ var projectOption = new Option<string?>("--project") { Description = "Path to .c
 var outputOption = new Option<string?>("--output") { Description = "Output directory for generated files" };
 var namespaceOption = new Option<string?>("--namespace") { Description = "C# namespace for generated types" };
 var clientNameOption = new Option<string?>("--client-name") { Description = "Client name override" };
-var outputStyleOption = new Option<string?>("--output-style") { Description = "Output style: TypedClient" };
+var outputStyleOption = new Option<string?>("--output-style") { Description = "Output style: TypedClientStructured or TypedClientFlat" };
 var configOption = new Option<string?>("--config") { Description = "Path to openapi-stitch.yaml config file" };
 var cleanOutputOption = new Option<bool>("--clean-output") { Description = "Delete stale generated files from previous runs" };
 
@@ -92,11 +92,14 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
             var outputStyle = loadedConfig.OutputStyle;
             if (outputStyleArg != null)
             {
-                if (!Enum.TryParse<OutputStyle>(outputStyleArg, ignoreCase: true, out outputStyle))
+                var styleParseResult = ParseOutputStyle(outputStyleArg);
+                if (!styleParseResult.Success)
                 {
-                    Console.Error.WriteLine($"error: Unknown output style '{outputStyleArg}'");
+                    Console.Error.WriteLine($"error: {styleParseResult.ErrorMessage}");
                     return 2;
                 }
+
+                outputStyle = styleParseResult.Value;
             }
 
             config = new ApiStitchConfig
@@ -120,14 +123,17 @@ generateCommand.SetAction(async (parseResult, cancellationToken) =>
 
             displayOutputDir = outputArg ?? "./Generated";
 
-            OutputStyle outputStyle = OutputStyle.TypedClient;
+            OutputStyle outputStyle = OutputStyle.TypedClientStructured;
             if (outputStyleArg != null)
             {
-                if (!Enum.TryParse<OutputStyle>(outputStyleArg, ignoreCase: true, out outputStyle))
+                var styleParseResult = ParseOutputStyle(outputStyleArg);
+                if (!styleParseResult.Success)
                 {
-                    Console.Error.WriteLine($"error: Unknown output style '{outputStyleArg}'");
+                    Console.Error.WriteLine($"error: {styleParseResult.ErrorMessage}");
                     return 2;
                 }
+
+                outputStyle = styleParseResult.Value;
             }
 
             config = new ApiStitchConfig
@@ -251,4 +257,16 @@ static bool LooksLikeRemoteHttpSpec(string spec)
         return false;
 
     return absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps;
+}
+
+static (bool Success, OutputStyle Value, string? ErrorMessage) ParseOutputStyle(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return (true, OutputStyle.TypedClientStructured, null);
+
+    if (Enum.TryParse<OutputStyle>(value, ignoreCase: true, out var parsed))
+        return (true, parsed, null);
+
+    var supported = string.Join(", ", Enum.GetNames<OutputStyle>());
+    return (false, default, $"Unknown output style '{value}'. Supported values: {supported}");
 }

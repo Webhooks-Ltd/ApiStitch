@@ -5,6 +5,9 @@ namespace ApiStitch.Configuration;
 /// </summary>
 public enum OutputStyle
 {
-    /// <summary>Typed HttpClient wrappers with IHttpClientFactory integration.</summary>
-    TypedClient
+    /// <summary>Typed HttpClient wrappers with deterministic structured folders.</summary>
+    TypedClientStructured,
+
+    /// <summary>Typed HttpClient wrappers emitted in a flat single folder.</summary>
+    TypedClientFlat,
 }

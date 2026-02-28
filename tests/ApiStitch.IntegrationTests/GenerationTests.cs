@@ -11,7 +11,12 @@ public class GenerationTests
 
     private static GenerationResult Generate(string specFile, string ns = "Generated.Models")
     {
-        var config = new ApiStitchConfig { Spec = SpecPath(specFile), Namespace = ns };
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath(specFile),
+            Namespace = ns,
+            OutputStyle = OutputStyle.TypedClientFlat,
+        };
         return new GenerationPipeline().Generate(config);
     }
 
@@ -210,7 +215,12 @@ public class GenerationTests
                           type: string
                 """);
 
-            var config = new ApiStitchConfig { Spec = tempSpec, Namespace = "Generated.Models" };
+            var config = new ApiStitchConfig
+            {
+                Spec = tempSpec,
+                Namespace = "Generated.Models",
+                OutputStyle = OutputStyle.TypedClientFlat,
+            };
             var result = new GenerationPipeline().Generate(config);
 
             Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
@@ -233,6 +243,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
@@ -276,6 +287,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
@@ -300,6 +312,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-inheritance.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SharedModels.*"],
@@ -325,6 +338,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-inheritance.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SharedModels.*"],
@@ -349,6 +363,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-problem-details.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["Microsoft.*"],
@@ -380,6 +395,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-json-patch-wrapped.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
@@ -404,6 +420,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-json-patch-wrapper-object.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
@@ -432,6 +449,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-json-patch-multipart.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*", "Microsoft.*"],
@@ -454,6 +472,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-json-patch-name-decoy.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
             TypeReuse = new TypeReuseConfig
             {
                 IncludeNamespaces = ["SampleApi.*"],
@@ -479,6 +498,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-composition-fallback.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
         };
         var result = new GenerationPipeline().Generate(config);
 
@@ -502,6 +522,7 @@ public class GenerationTests
         {
             Spec = SpecPath("type-reuse-problem-details.yaml"),
             Namespace = "Generated.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
         };
         var result = new GenerationPipeline().Generate(config);
 
@@ -626,6 +647,53 @@ public class GenerationTests
         var petstoreResult = Generate("petstore.yaml");
         Assert.DoesNotContain(petstoreResult.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
         var (success, compileDiags, _) = RoslynCompilationHelper.Compile(petstoreResult.Files, excludeJsonContext: true);
+        Assert.True(success, FormatDiagnostics(compileDiags));
+    }
+
+    [Fact]
+    public void InlinePrimitiveResponse_LoginUser_IsGenerated()
+    {
+        var result = Generate("inline-response-primitives.yaml");
+
+        Assert.DoesNotContain(result.Diagnostics, d =>
+            d.Code == "AS401"
+            && (d.SpecPath?.Contains("/paths/user/login/get/responses/200/content/application~1json/schema", StringComparison.Ordinal) == true));
+
+        var userClient = result.Files.First(f =>
+            f.RelativePath.EndsWith("UserClient.cs")
+            && f.Content.Contains("internal sealed partial class", StringComparison.Ordinal));
+        Assert.Contains("Task<string> LoginUserAsync", userClient.Content);
+        Assert.Contains("var rawResponse = await response.Content.ReadAsStringAsync", userClient.Content);
+        Assert.Contains("JsonSerializer.Deserialize<string>(trimmedRawResponse", userClient.Content);
+        Assert.DoesNotContain("ReadFromJsonAsync<string>", userClient.Content);
+    }
+
+    [Fact]
+    public void InlineResponseObjects_GenerateModelsAndPreserveFallbackDiagnostics()
+    {
+        var result = Generate("inline-response-objects.yaml");
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(result.Files, f => f.RelativePath == "GetInventory200Response.cs");
+
+        var storeClient = result.Files.First(f =>
+            f.RelativePath.EndsWith("StoreClient.cs")
+            && f.Content.Contains("internal sealed partial class", StringComparison.Ordinal));
+        Assert.Contains("Task<GetInventory200Response> GetInventoryAsync", storeClient.Content);
+
+        var petsClient = result.Files.First(f =>
+            f.RelativePath.EndsWith("PetsClient.cs")
+            && f.Content.Contains("internal sealed partial class", StringComparison.Ordinal));
+        Assert.Contains("Task<Pet> CreatePetMixedAsync", petsClient.Content);
+
+        Assert.DoesNotContain(result.Files, f => f.RelativePath.Contains("ReportsClient"));
+
+        var as401 = result.Diagnostics.Where(d => d.Code == "AS401").ToList();
+        Assert.Equal(2, as401.Count);
+        Assert.Contains(as401, d => d.Message.Contains("status 200", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(as401, d => d.Message.Contains("nested inline object member", StringComparison.OrdinalIgnoreCase));
+
+        var (success, compileDiags, _) = RoslynCompilationHelper.Compile(result.Files, excludeJsonContext: true);
         Assert.True(success, FormatDiagnostics(compileDiags));
     }
 

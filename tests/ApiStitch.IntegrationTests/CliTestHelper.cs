@@ -13,7 +13,7 @@ internal static class CliTestHelper
         var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
         var cliDir = Path.Combine(repoRoot, "src", "ApiStitch.Cli", "bin");
 
-        foreach (var config in new[] { "Release", "Debug" })
+        foreach (var config in new[] { "Debug", "Release" })
         {
             var candidate = Path.Combine(cliDir, config, "net10.0", "ApiStitch.Cli.dll");
             if (File.Exists(candidate))

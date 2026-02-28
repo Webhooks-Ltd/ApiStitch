@@ -164,48 +164,41 @@ The `--spec` option SHALL accept either a local file path or a full HTTP(S) URL.
 
 ### Requirement: CLI argument precedence
 
-The system SHALL resolve configuration with strict precedence: defaults < YAML file < CLI arguments. CLI arguments SHALL override YAML values when both are provided. The `generate` subcommand SHALL accept `--spec`, `--output`, `--namespace`, `--client-name`, `--output-style`, `--config`, and `--clean-output` options.
+CLI arguments SHALL take precedence over configuration file values.
 
-#### Scenario: CLI overrides YAML namespace
-- **WHEN** YAML config has `namespace: MyApi.Generated` and CLI passes `--namespace Override.Namespace`
-- **THEN** the generation uses `Override.Namespace`
+Supported CLI options include:
+- `--spec`
+- `--namespace`
+- `--output`
+- `--output-style`
+- `--client-name`
 
-#### Scenario: CLI overrides YAML spec path
-- **WHEN** YAML config has `spec: petstore.yaml` and CLI passes `--spec openapi.yaml`
-- **THEN** the generation uses `openapi.yaml`
+When both CLI and config provide values for the same setting, CLI value SHALL win.
+
+#### Scenario: CLI --namespace overrides config
+- **WHEN** config has `namespace: Config.Namespace` and CLI has `--namespace Cli.Namespace`
+- **THEN** generated code uses `Cli.Namespace`
+
+#### Scenario: CLI --output overrides config
+- **WHEN** config has `outputDir: ./generated` and CLI has `--output ./out`
+- **THEN** files are written to `./out`
 
 #### Scenario: CLI --output-style option
-- **WHEN** `--output-style TypedClient` is passed
-- **THEN** the generation uses `OutputStyle.TypedClient`
+- **WHEN** CLI has `--output-style TypedClientStructured`
+- **THEN** `ApiStitchConfig.OutputStyle` is `OutputStyle.TypedClientStructured`
 
-#### Scenario: CLI --client-name option
-- **WHEN** `--client-name MyApi` is passed
-- **THEN** the generation uses `MyApi` as the client name (overriding spec title derivation)
+#### Scenario: CLI --output-style flat option
+- **WHEN** CLI has `--output-style TypedClientFlat`
+- **THEN** `ApiStitchConfig.OutputStyle` is `OutputStyle.TypedClientFlat`
 
-#### Scenario: YAML overrides defaults
-- **WHEN** YAML config has `outputDir: ./src/Generated` and no CLI `--output` is passed
-- **THEN** the generation uses `./src/Generated` (not the default `./Generated`)
+#### Scenario: CLI --output-style invalid value
+- **WHEN** CLI has `--output-style InvalidStyle`
+- **THEN** command exits with code 2
+- **THEN** stderr includes message listing valid options (`TypedClientStructured`, `TypedClientFlat`)
 
-#### Scenario: Defaults used when no YAML and no CLI
-- **WHEN** only `--spec petstore.yaml` is provided with no other options
-- **THEN** namespace defaults to `ApiStitch.Generated`, output defaults to `./Generated`, output style defaults to `TypedClient`
-
-#### Scenario: No config and no --spec
-- **WHEN** `apistitch generate` is run with no `openapi-stitch.yaml` in CWD and no `--spec` argument
-- **THEN** the process prints an error: "No openapi-stitch.yaml found in the current directory. Either create one or pass --spec <path>."
-- **THEN** the process exits with code 2
-
-#### Scenario: --clean-output flag from CLI
-- **WHEN** `apistitch generate --clean-output` is run
-- **THEN** `FileWriteOptions.CleanOutput` is set to `true`
-
-#### Scenario: cleanOutput from YAML delivery section
-- **WHEN** the YAML config contains `delivery: { cleanOutput: true }` and no `--clean-output` flag is passed
-- **THEN** `FileWriteOptions.CleanOutput` is set to `true`
-
-#### Scenario: CLI --clean-output overrides YAML (one-way)
-- **WHEN** the YAML config has `delivery: { cleanOutput: false }` and `--clean-output` is passed
-- **THEN** `FileWriteOptions.CleanOutput` is set to `true` (CLI wins; there is no `--no-clean-output` flag)
+#### Scenario: output style default when omitted
+- **WHEN** neither config nor CLI specify output style
+- **THEN** output style defaults to `OutputStyle.TypedClientStructured`
 
 ### Requirement: YAML paths resolve relative to YAML file location
 

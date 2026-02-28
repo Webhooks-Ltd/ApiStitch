@@ -179,11 +179,51 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
         }
 {{~ end ~}}
 {{~ if op.response_use_json_options ~}}
+{{~ if op.response_type == "string" ~}}
+        var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(rawResponse))
+            return string.Empty;
+
+        var trimmedRawResponse = rawResponse.Trim();
+        if (trimmedRawResponse.Length >= 2 && trimmedRawResponse[0] == '"' && trimmedRawResponse[^1] == '"')
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<string>(trimmedRawResponse, _jsonOptions) ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return rawResponse;
+{{~ else ~}}
         return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
             _jsonOptions, cancellationToken).ConfigureAwait(false))!;
+{{~ end ~}}
+{{~ else ~}}
+{{~ if op.response_type == "string" ~}}
+        var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(rawResponse))
+            return string.Empty;
+
+        var trimmedRawResponse = rawResponse.Trim();
+        if (trimmedRawResponse.Length >= 2 && trimmedRawResponse[0] == '"' && trimmedRawResponse[^1] == '"')
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<string>(trimmedRawResponse) ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return rawResponse;
 {{~ else ~}}
         return (await response.Content.ReadFromJsonAsync<{{ op.response_type }}>(
             cancellationToken).ConfigureAwait(false))!;
+{{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}

@@ -66,7 +66,7 @@ public static class ConfigLoader
             return (null, new FileWriteOptions(), [new Diagnostic(DiagnosticSeverity.Error, "AS302", "Only one of 'spec' or 'project' may be specified, not both")]);
         }
 
-        OutputStyle outputStyle = OutputStyle.TypedClient;
+        OutputStyle outputStyle = OutputStyle.TypedClientStructured;
         var diagnostics = new List<Diagnostic>();
 
         if (!string.IsNullOrWhiteSpace(dto.OutputStyle))

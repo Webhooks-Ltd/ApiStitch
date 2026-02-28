@@ -106,7 +106,7 @@ public class ScribanModelEmitter : IModelEmitter
         context.PushGlobal(model);
 
         var content = _recordTemplate.Render(context).TrimEnd() + "\n";
-        return new GeneratedFile($"{schema.Name}.cs", content);
+        return new GeneratedFile(RoutePath(config.OutputStyle, "Models", $"{schema.Name}.cs"), content);
     }
 
     private GeneratedFile EmitEnum(ApiSchema schema, ApiStitchConfig config)
@@ -127,7 +127,7 @@ public class ScribanModelEmitter : IModelEmitter
         context.PushGlobal(model);
 
         var content = _enumTemplate.Render(context).TrimEnd() + "\n";
-        return new GeneratedFile($"{schema.Name}.cs", content);
+        return new GeneratedFile(RoutePath(config.OutputStyle, "Models", $"{schema.Name}.cs"), content);
     }
 
     private GeneratedFile EmitJsonContext(List<string> typeNames, ApiSpecification spec, ApiStitchConfig config)
@@ -162,7 +162,14 @@ public class ScribanModelEmitter : IModelEmitter
         context.PushGlobal(model);
 
         var content = _contextTemplate.Render(context).TrimEnd() + "\n";
-        return new GeneratedFile($"{contextName}.cs", content);
+        return new GeneratedFile(RoutePath(config.OutputStyle, "Infrastructure", $"{contextName}.cs"), content);
+    }
+
+    private static string RoutePath(OutputStyle outputStyle, string folder, string fileName)
+    {
+        return outputStyle == OutputStyle.TypedClientStructured
+            ? $"{folder}/{fileName}"
+            : fileName;
     }
 
     private static string GetPropertyTypeName(ApiProperty property)

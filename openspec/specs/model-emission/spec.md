@@ -127,11 +127,26 @@ The system SHALL produce identical output for identical input across runs. Files
 
 ### Requirement: Emit one file per type
 
-The system SHALL emit each record and enum as a separate `.cs` file named after the type (e.g., `Pet.cs`, `PetStatus.cs`). The JsonSerializerContext SHALL be in its own file.
+The model emitter SHALL emit one `.cs` file per object/record/enum schema and one JsonSerializerContext file.
 
-#### Scenario: Three schemas produce four files
-- **WHEN** a spec has schemas Pet (object), Category (object), PetStatus (enum)
-- **THEN** the emitter produces `Pet.cs`, `Category.cs`, `PetStatus.cs`, and `{Name}JsonContext.cs`
+When output style is `TypedClientStructured`:
+- model files SHALL be emitted under `Models/`
+- JsonSerializerContext SHALL be emitted under `Infrastructure/`
+
+When output style is `TypedClientFlat`:
+- model files and JsonSerializerContext SHALL be emitted at output root.
+
+#### Scenario: simple model emission with structured layout
+- **WHEN** schemas include `Pet` object, `Category` object, and `PetStatus` enum and output style is `TypedClientStructured`
+- **THEN** files include `Models/Pet.cs`, `Models/Category.cs`, `Models/PetStatus.cs`, and `Infrastructure/{ClientName}JsonContext.cs`
+
+#### Scenario: simple model emission with flat layout
+- **WHEN** schemas include `Pet` object, `Category` object, and `PetStatus` enum and output style is `TypedClientFlat`
+- **THEN** files include `Pet.cs`, `Category.cs`, `PetStatus.cs`, and `{ClientName}JsonContext.cs` at output root
+
+#### Scenario: deterministic model path ordering
+- **WHEN** generation runs repeatedly with same input and output style
+- **THEN** emitted model/context relative paths are stable and deterministic
 
 ### Requirement: Emit diagnostic comments for unsupported patterns
 
@@ -196,4 +211,21 @@ The system SHALL emit an `internal static class {EnumName}Extensions` with a `To
 - **WHEN** the extension method is emitted
 - **THEN** it uses a switch expression with string constants (no reflection, no Enum.ToString())
 - **THEN** a `_ => throw new ArgumentOutOfRangeException(nameof(value))` default arm is included
+
+### Requirement: Emit synthetic inline response models
+
+The system SHALL emit generated model files for synthetic schemas created from supported inline success-response object schemas.
+
+#### Scenario: Synthetic inline response model is emitted
+- **WHEN** operation parsing creates a synthetic inline response ApiSchema for a supported success response object
+- **THEN** model emission writes a corresponding `.cs` model file using the same conventions as other generated object schemas
+
+#### Scenario: Synthetic inline response model is included in JsonSerializerContext
+- **WHEN** a synthetic inline response ApiSchema is present in ApiSpecification.Schemas
+- **THEN** JsonSerializerContext includes metadata for the synthetic type unless excluded by compatibility rules
+
+#### Scenario: Inline primitive response does not create synthetic model file
+- **WHEN** an operation uses a supported inline primitive success-response schema
+- **THEN** no synthetic model file is created for that primitive response
+- **THEN** client emission uses the mapped primitive type directly
 

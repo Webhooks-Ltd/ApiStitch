@@ -16,6 +16,7 @@ public class GenerationPipelineTests
         {
             Spec = SpecPath("minimal-valid.yaml"),
             Namespace = "TestApi.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
         };
 
         var pipeline = new GenerationPipeline();
@@ -47,7 +48,12 @@ public class GenerationPipelineTests
             """);
         try
         {
-            var config = new ApiStitchConfig { Spec = tempFile, Namespace = "TestApi.Models" };
+            var config = new ApiStitchConfig
+            {
+                Spec = tempFile,
+                Namespace = "TestApi.Models",
+                OutputStyle = OutputStyle.TypedClientFlat,
+            };
             var result = new GenerationPipeline().Generate(config);
 
             Assert.Contains(result.Diagnostics, d => d.Code == "AS205" && d.Severity == DiagnosticSeverity.Warning);
@@ -65,6 +71,7 @@ public class GenerationPipelineTests
         {
             Spec = "/nonexistent/spec.yaml",
             Namespace = "TestApi.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
         };
 
         var pipeline = new GenerationPipeline();

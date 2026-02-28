@@ -10,6 +10,7 @@ public class ScribanModelEmitterTests
     {
         Spec = "test.yaml",
         Namespace = "TestApi.Models",
+        OutputStyle = OutputStyle.TypedClientFlat,
     };
 
     [Fact]
@@ -131,5 +132,40 @@ public class ScribanModelEmitterTests
         var contextFile = Assert.Single(result.Files, f => f.RelativePath.EndsWith("JsonContext.cs"));
         Assert.Contains("Animal", contextFile.Content);
         Assert.Contains("SharedModels.Dog", contextFile.Content);
+    }
+
+    [Fact]
+    public void StructuredLayout_RoutesModelsAndContextToExpectedFolders()
+    {
+        var local = new ApiSchema
+        {
+            Name = "Category",
+            OriginalName = "Category",
+            Kind = SchemaKind.Object,
+            CSharpTypeName = "Category",
+            Properties =
+            [
+                new ApiProperty
+                {
+                    Name = "name",
+                    CSharpName = "Name",
+                    Schema = new ApiSchema { Name = "string", OriginalName = "string", Kind = SchemaKind.Primitive, PrimitiveType = PrimitiveType.String },
+                    IsRequired = true,
+                }
+            ],
+        };
+        var spec = new ApiSpecification { Schemas = [local], Operations = [] };
+        var config = new ApiStitchConfig
+        {
+            Spec = DefaultConfig.Spec,
+            Namespace = DefaultConfig.Namespace,
+            OutputStyle = OutputStyle.TypedClientStructured,
+        };
+
+        var emitter = new ScribanModelEmitter();
+        var result = emitter.Emit(spec, config);
+
+        Assert.Contains(result.Files, f => f.RelativePath == "Models/Category.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "Infrastructure/ModelsJsonContext.cs");
     }
 }

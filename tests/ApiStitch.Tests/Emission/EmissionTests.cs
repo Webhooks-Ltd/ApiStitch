@@ -11,7 +11,12 @@ public class EmissionTests
 
     private static GenerationResult Generate(string specFileName, string ns = "TestApi.Models")
     {
-        var config = new ApiStitchConfig { Spec = SpecPath(specFileName), Namespace = ns };
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath(specFileName),
+            Namespace = ns,
+            OutputStyle = OutputStyle.TypedClientFlat,
+        };
         return new GenerationPipeline().Generate(config);
     }
 
@@ -213,7 +218,12 @@ public class EmissionTests
         File.WriteAllText(tempFile, yaml);
         try
         {
-            var config = new ApiStitchConfig { Spec = tempFile, Namespace = "TestApi.Models" };
+            var config = new ApiStitchConfig
+            {
+                Spec = tempFile,
+                Namespace = "TestApi.Models",
+                OutputStyle = OutputStyle.TypedClientFlat,
+            };
             return new GenerationPipeline().Generate(config);
         }
         finally
@@ -246,6 +256,7 @@ public class EmissionTests
             #nullable enable
             using System;
             using System.CodeDom.Compiler;
+            using System.Collections.Generic;
             using System.Text.Json;
             using System.Text.Json.Serialization;
 

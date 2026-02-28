@@ -22,6 +22,13 @@ public class OperationTransformerTests
     private static (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformOperations(
         string yaml, ApiStitchConfig? config = null)
     {
+        var (operations, _, clientName, diagnostics) = TransformOperationsWithSynthetic(yaml, config);
+        return (operations, clientName, diagnostics);
+    }
+
+    private static (IReadOnlyList<ApiOperation> Operations, IReadOnlyList<ApiSchema> SyntheticSchemas, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformOperationsWithSynthetic(
+        string yaml, ApiStitchConfig? config = null)
+    {
         var doc = ParseYaml(yaml);
         var transformer = new SchemaTransformer();
         var (spec, schemaMap, _) = transformer.Transform(doc);
@@ -283,7 +290,7 @@ public class OperationTransformerTests
         var transformer = new SchemaTransformer();
         var (spec, schemaMap, _) = transformer.Transform(doc);
         var config = new ApiStitchConfig { Spec = "test.yaml" };
-        var (ops, _, _) = OperationTransformer.Transform(doc, schemaMap, config);
+        var (ops, _, _, _) = OperationTransformer.Transform(doc, schemaMap, config);
 
         var op = Assert.Single(ops);
         var param = Assert.Single(op.Parameters);
@@ -623,7 +630,7 @@ public class OperationTransformerTests
         var transformer = new SchemaTransformer();
         var (spec, schemaMap, _) = transformer.Transform(doc);
         var config = new ApiStitchConfig { Spec = "test.yaml" };
-        var (ops, _, _) = OperationTransformer.Transform(doc, schemaMap, config);
+        var (ops, _, _, _) = OperationTransformer.Transform(doc, schemaMap, config);
 
         var op = Assert.Single(ops);
         Assert.NotNull(op.RequestBody);
@@ -1001,6 +1008,187 @@ public class OperationTransformerTests
 
         var op = Assert.Single(ops);
         Assert.Null(op.SuccessResponse);
+    }
+
+    [Fact]
+    public void Response_InlineObjectWithAdditionalPropertiesPrimitive_GeneratesSyntheticSchema()
+    {
+        var (ops, syntheticSchemas, _, diags) = TransformOperationsWithSynthetic("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /store/inventory:
+                get:
+                  operationId: getInventory
+                  tags: [Store]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            additionalProperties:
+                              type: integer
+                              format: int32
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(SchemaKind.Object, op.SuccessResponse!.Schema!.Kind);
+        Assert.True(op.SuccessResponse.Schema.HasAdditionalProperties);
+        Assert.Equal(PrimitiveType.Int32, op.SuccessResponse.Schema.AdditionalPropertiesSchema!.PrimitiveType);
+        Assert.Contains(syntheticSchemas, s => s.Name == op.SuccessResponse.Schema.Name);
+        Assert.DoesNotContain(diags, d => d.Code == "AS401");
+    }
+
+    [Fact]
+    public void Response_InlinePrimitiveString_GeneratesPrimitiveSuccessResponseWithoutAS401()
+    {
+        var (ops, syntheticSchemas, _, diags) = TransformOperationsWithSynthetic("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /user/login:
+                get:
+                  operationId: loginUser
+                  tags: [User]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: string
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(SchemaKind.Primitive, op.SuccessResponse!.Schema!.Kind);
+        Assert.Equal(PrimitiveType.String, op.SuccessResponse.Schema.PrimitiveType);
+        Assert.Empty(syntheticSchemas);
+        Assert.DoesNotContain(diags, d => d.Code == "AS401");
+    }
+
+    [Fact]
+    public void Response_InlineNestedObjectMember_SkippedWithAS401Reason()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /report:
+                get:
+                  operationId: getReport
+                  tags: [Reports]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              meta:
+                                type: object
+                                properties:
+                                  id:
+                                    type: string
+            components:
+              schemas: {}
+            """);
+
+        Assert.Empty(ops);
+        var diag = Assert.Single(diags, d => d.Code == "AS401");
+        Assert.Contains("nested inline object member", diag.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Move the schema to components", diag.Message);
+    }
+
+    [Fact]
+    public void Response_Multiple2xx_UnsupportedLowerSupportedHigher_UsesHigherAndWarns()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets:
+                post:
+                  operationId: createPet
+                  tags: [Pets]
+                  responses:
+                    '200':
+                      description: Unsupported inline composition
+                      content:
+                        application/json:
+                          schema:
+                            oneOf:
+                              - $ref: '#/components/schemas/Pet'
+                              - type: string
+                    '201':
+                      description: Created
+                      content:
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/Pet'
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+            """);
+
+        var op = Assert.Single(ops);
+        Assert.NotNull(op.SuccessResponse);
+        Assert.Equal(201, op.SuccessResponse!.StatusCode);
+
+        var diag = Assert.Single(diags, d => d.Code == "AS401");
+        Assert.Contains("Response for status 200", diag.Message);
+        Assert.Contains("unsupported inline response schema", diag.Message);
+        Assert.Contains("$ref", diag.Message);
+    }
+
+    [Fact]
+    public void Response_InlineSyntheticNameCollision_ResolvedDeterministically()
+    {
+        var yaml = """
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /store/inventory:
+                get:
+                  operationId: getInventory
+                  tags: [Store]
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            additionalProperties:
+                              type: integer
+            components:
+              schemas:
+                GetInventory200Response:
+                  type: object
+                  properties:
+                    existing:
+                      type: string
+            """;
+
+        var (_, syntheticSchemas1, _, _) = TransformOperationsWithSynthetic(yaml);
+        var (_, syntheticSchemas2, _, _) = TransformOperationsWithSynthetic(yaml);
+
+        var schema1 = Assert.Single(syntheticSchemas1);
+        var schema2 = Assert.Single(syntheticSchemas2);
+        Assert.Equal("GetInventory200Response2", schema1.Name);
+        Assert.Equal(schema1.Name, schema2.Name);
     }
 
     // ──────────────────────────────────────────────

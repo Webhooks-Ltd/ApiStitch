@@ -55,6 +55,7 @@ public class ScribanClientEmitter : IClientEmitter
         var jsonContextName = $"{lastSegment}JsonContext";
         var jsonOptionsName = $"{clientName}JsonOptions";
         var optionsClassName = $"{clientName}ClientOptions";
+        var outputStyle = config.OutputStyle;
 
         var grouped = spec.Operations
             .GroupBy(o => o.Tag, StringComparer.Ordinal)
@@ -83,29 +84,29 @@ public class ScribanClientEmitter : IClientEmitter
             var operations = group.OrderBy(o => o.CSharpMethodName, StringComparer.Ordinal).ToList();
             var opModels = BuildOperationModels(operations, queryEnums);
 
-            files.Add(EmitInterface(ns, interfaceName, opModels));
-            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, hasProblemDetailsSupport, opModels));
+            files.Add(EmitInterface(ns, interfaceName, opModels, outputStyle));
+            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, hasProblemDetailsSupport, opModels, outputStyle));
 
             tagClients.Add(new { interface_name = interfaceName, class_name = className });
         }
 
         if (hasProblemDetailsSupport && problemDetailsSchema is not { IsExternal: true })
-            files.Add(EmitProblemDetails(ns));
-        files.Add(EmitApiException(ns, problemDetailsTypeName, hasProblemDetailsSupport));
-        files.Add(EmitClientOptions(ns, clientName, optionsClassName));
-        files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName));
-        files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients));
+            files.Add(EmitProblemDetails(ns, outputStyle));
+        files.Add(EmitApiException(ns, problemDetailsTypeName, hasProblemDetailsSupport, outputStyle));
+        files.Add(EmitClientOptions(ns, clientName, optionsClassName, outputStyle));
+        files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName, outputStyle));
+        files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients, outputStyle));
 
         var hasStreamResponse = spec.Operations.Any(o =>
             o.SuccessResponse?.ContentKind == ContentKind.OctetStream);
         if (hasStreamResponse)
-            files.Add(EmitFileResponse(ns));
+            files.Add(EmitFileResponse(ns, outputStyle));
 
         foreach (var enumName in queryEnums.OrderBy(n => n, StringComparer.Ordinal))
         {
             var enumSchema = spec.Schemas.FirstOrDefault(s => s.Name == enumName && s.Kind == SchemaKind.Enum);
             if (enumSchema is not null)
-                files.Add(EmitEnumExtensions(ns, enumSchema));
+                files.Add(EmitEnumExtensions(ns, enumSchema, outputStyle));
         }
 
         files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.Ordinal));
@@ -136,7 +137,7 @@ public class ScribanClientEmitter : IClientEmitter
             if (hasBody)
                 allParams.AddRange(bodyParams);
 
-            foreach (var p in op.Parameters.Where(p => p.Location == ParameterLocation.Query).OrderBy(p => p.Name, StringComparer.Ordinal))
+            foreach (var p in op.Parameters.Where(p => p.Location == ParameterLocation.Query))
             {
                 hasQueryParams = true;
 
@@ -229,6 +230,8 @@ public class ScribanClientEmitter : IClientEmitter
             case ContentKind.Json:
             {
                 var typeName = GetTypeName(requestBody.Schema);
+                if (!requestBody.IsRequired && !typeName.EndsWith("?", StringComparison.Ordinal))
+                    typeName += "?";
                 var useJsonOptions = JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(requestBody.Schema);
                 bodyParams.Add(new
                 {
@@ -358,9 +361,10 @@ public class ScribanClientEmitter : IClientEmitter
             }
             case ContentKind.PlainText:
             {
+                var typeName = requestBody.IsRequired ? "string" : "string?";
                 bodyParams.Add(new
                 {
-                    type_name = "string",
+                    type_name = typeName,
                     param_name = "body",
                     is_required = requestBody.IsRequired,
                     default_value = requestBody.IsRequired ? (string?)null : "null",
@@ -529,19 +533,19 @@ public class ScribanClientEmitter : IClientEmitter
         return path;
     }
 
-    private GeneratedFile EmitInterface(string ns, string interfaceName, List<object> operations)
+    private GeneratedFile EmitInterface(string ns, string interfaceName, List<object> operations, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
         model.Add("interface_name", interfaceName);
         model.Add("operations", operations);
 
-        return RenderTemplate(_interfaceTemplate, $"{interfaceName}.cs", model);
+        return RenderTemplate(_interfaceTemplate, RoutePath(outputStyle, "Contracts", $"{interfaceName}.cs"), model);
     }
 
     private GeneratedFile EmitImplementation(
         string ns, string interfaceName, string className, string clientName,
-        string jsonOptionsName, string problemDetailsTypeName, bool hasProblemDetailsSupport, List<object> operations)
+        string jsonOptionsName, string problemDetailsTypeName, bool hasProblemDetailsSupport, List<object> operations, OutputStyle outputStyle)
     {
         var hasQueryMethods = operations.Any(o =>
         {
@@ -560,46 +564,46 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("has_problem_details", hasProblemDetailsSupport);
         model.Add("problem_details_type", problemDetailsTypeName);
 
-        return RenderTemplate(_implementationTemplate, $"{className}.cs", model);
+        return RenderTemplate(_implementationTemplate, RoutePath(outputStyle, "Clients", $"{className}.cs"), model);
     }
 
-    private GeneratedFile EmitApiException(string ns, string problemDetailsTypeName, bool hasProblemDetailsSupport)
+    private GeneratedFile EmitApiException(string ns, string problemDetailsTypeName, bool hasProblemDetailsSupport, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
         model.Add("problem_details_type", problemDetailsTypeName);
         model.Add("has_problem_details", hasProblemDetailsSupport);
 
-        return RenderTemplate(_exceptionTemplate, "ApiException.cs", model);
+        return RenderTemplate(_exceptionTemplate, RoutePath(outputStyle, "Infrastructure", "ApiException.cs"), model);
     }
 
-    private GeneratedFile EmitFileResponse(string ns)
+    private GeneratedFile EmitFileResponse(string ns, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
 
-        return RenderTemplate(_fileResponseTemplate, "FileResponse.cs", model);
+        return RenderTemplate(_fileResponseTemplate, RoutePath(outputStyle, "Clients", "FileResponse.cs"), model);
     }
 
-    private GeneratedFile EmitProblemDetails(string ns)
+    private GeneratedFile EmitProblemDetails(string ns, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
 
-        return RenderTemplate(_problemDetailsTemplate, "ProblemDetails.cs", model);
+        return RenderTemplate(_problemDetailsTemplate, RoutePath(outputStyle, "Infrastructure", "ProblemDetails.cs"), model);
     }
 
-    private GeneratedFile EmitClientOptions(string ns, string clientName, string optionsClassName)
+    private GeneratedFile EmitClientOptions(string ns, string clientName, string optionsClassName, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
         model.Add("client_name", clientName);
         model.Add("options_class_name", optionsClassName);
 
-        return RenderTemplate(_optionsTemplate, $"{optionsClassName}.cs", model);
+        return RenderTemplate(_optionsTemplate, RoutePath(outputStyle, "Configuration", $"{optionsClassName}.cs"), model);
     }
 
-    private GeneratedFile EmitJsonOptionsWrapper(string ns, string clientName, string jsonOptionsName, string jsonContextName)
+    private GeneratedFile EmitJsonOptionsWrapper(string ns, string clientName, string jsonOptionsName, string jsonContextName, OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
@@ -607,11 +611,11 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("json_options_name", jsonOptionsName);
         model.Add("json_context_name", jsonContextName);
 
-        return RenderTemplate(_jsonOptionsTemplate, $"{jsonOptionsName}.cs", model);
+        return RenderTemplate(_jsonOptionsTemplate, RoutePath(outputStyle, "Configuration", $"{jsonOptionsName}.cs"), model);
     }
 
     private GeneratedFile EmitDiRegistration(
-        string ns, string clientName, string optionsClassName, string jsonOptionsName, List<object> tagClients)
+        string ns, string clientName, string optionsClassName, string jsonOptionsName, List<object> tagClients, OutputStyle outputStyle)
     {
         var extensionsClassName = $"{clientName}ServiceCollectionExtensions";
 
@@ -623,10 +627,10 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("extensions_class_name", extensionsClassName);
         model.Add("tag_clients", tagClients);
 
-        return RenderTemplate(_diRegistrationTemplate, $"{extensionsClassName}.cs", model);
+        return RenderTemplate(_diRegistrationTemplate, RoutePath(outputStyle, "Configuration", $"{extensionsClassName}.cs"), model);
     }
 
-    private GeneratedFile EmitEnumExtensions(string ns, ApiSchema enumSchema)
+    private GeneratedFile EmitEnumExtensions(string ns, ApiSchema enumSchema, OutputStyle outputStyle)
     {
         var members = enumSchema.EnumValues.Select(m => new
         {
@@ -639,7 +643,14 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("enum_name", enumSchema.Name);
         model.Add("members", members);
 
-        return RenderTemplate(_enumExtensionsTemplate, $"{enumSchema.Name}Extensions.cs", model);
+        return RenderTemplate(_enumExtensionsTemplate, RoutePath(outputStyle, "Configuration", $"{enumSchema.Name}Extensions.cs"), model);
+    }
+
+    private static string RoutePath(OutputStyle outputStyle, string folder, string fileName)
+    {
+        return outputStyle == OutputStyle.TypedClientStructured
+            ? $"{folder}/{fileName}"
+            : fileName;
     }
 
     private static string GetTypeName(ApiSchema schema)

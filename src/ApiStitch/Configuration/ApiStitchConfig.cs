@@ -18,7 +18,7 @@ public class ApiStitchConfig
     public string OutputDir { get; init; } = "./Generated";
 
     /// <summary>Output style for client code generation.</summary>
-    public OutputStyle OutputStyle { get; init; } = OutputStyle.TypedClient;
+    public OutputStyle OutputStyle { get; init; } = OutputStyle.TypedClientStructured;
 
     /// <summary>Optional client name override. When null, derived from the spec's info.title.</summary>
     public string? ClientName { get; init; }

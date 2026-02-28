@@ -183,13 +183,43 @@ public class CliTests : IDisposable
         var specPath = Path.Combine(_specsDir, "petstore.yaml");
         var outputDir = Path.Combine(_tempDir, "output");
 
-        var result = await CliTestHelper.RunAsync($"generate --spec \"{specPath}\" --output \"{outputDir}\" --output-style TypedClient --client-name MyApi");
+        var result = await CliTestHelper.RunAsync($"generate --spec \"{specPath}\" --output \"{outputDir}\" --output-style TypedClientFlat --client-name MyApi");
 
         Assert.Equal(0, result.ExitCode);
         var csFiles = Directory.GetFiles(outputDir, "*Client.cs", SearchOption.AllDirectories);
         Assert.NotEmpty(csFiles);
         var clientContent = await File.ReadAllTextAsync(csFiles[0]);
         Assert.Contains("MyApi", clientContent);
+    }
+
+    [Fact]
+    public async Task InvalidOutputStyle_ShowsSupportedValuesAndExitCode2()
+    {
+        var specPath = Path.Combine(_specsDir, "petstore.yaml");
+        var outputDir = Path.Combine(_tempDir, "output-invalid-style");
+
+        var result = await CliTestHelper.RunAsync($"generate --spec \"{specPath}\" --output \"{outputDir}\" --output-style InvalidStyle");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Unknown output style 'InvalidStyle'", result.Stderr);
+        Assert.Contains("TypedClientStructured", result.Stderr);
+        Assert.Contains("TypedClientFlat", result.Stderr);
+    }
+
+    [Fact]
+    public async Task DefaultOutputStyle_IsStructuredLayout()
+    {
+        var specPath = Path.Combine(_specsDir, "petstore.yaml");
+        var outputDir = Path.Combine(_tempDir, "output-structured-default");
+
+        var result = await CliTestHelper.RunAsync($"generate --spec \"{specPath}\" --output \"{outputDir}\"");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(Directory.Exists(Path.Combine(outputDir, "Clients")));
+        Assert.True(Directory.Exists(Path.Combine(outputDir, "Contracts")));
+        Assert.True(Directory.Exists(Path.Combine(outputDir, "Models")));
+        Assert.True(Directory.Exists(Path.Combine(outputDir, "Infrastructure")));
+        Assert.True(Directory.Exists(Path.Combine(outputDir, "Configuration")));
     }
 
     [Fact]

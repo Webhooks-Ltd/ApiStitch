@@ -36,7 +36,7 @@ public class ConfigLoaderTests
         Assert.Equal("./petstore.yaml", config.Spec);
         Assert.Equal("ApiStitch.Generated", config.Namespace);
         Assert.Equal("./Generated", config.OutputDir);
-        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+        Assert.Equal(OutputStyle.TypedClientStructured, config.OutputStyle);
         Assert.Null(config.ClientName);
     }
 
@@ -108,18 +108,18 @@ public class ConfigLoaderTests
     }
 
     [Fact]
-    public void OutputStyle_ExplicitTypedClient()
+    public void OutputStyle_ExplicitStructured()
     {
         var yaml = """
             spec: ./petstore.yaml
-            outputStyle: TypedClient
+            outputStyle: TypedClientStructured
             """;
 
         var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
-        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+        Assert.Equal(OutputStyle.TypedClientStructured, config.OutputStyle);
     }
 
     [Fact]
@@ -127,14 +127,29 @@ public class ConfigLoaderTests
     {
         var yaml = """
             spec: ./petstore.yaml
-            outputStyle: typedclient
+            outputStyle: typedclientflat
             """;
 
         var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
 
         Assert.NotNull(config);
         Assert.Empty(diagnostics);
-        Assert.Equal(OutputStyle.TypedClient, config.OutputStyle);
+        Assert.Equal(OutputStyle.TypedClientFlat, config.OutputStyle);
+    }
+
+    [Fact]
+    public void OutputStyle_ExplicitFlat()
+    {
+        var yaml = """
+            spec: ./petstore.yaml
+            outputStyle: TypedClientFlat
+            """;
+
+        var (config, _, diagnostics) = ConfigLoader.LoadFromYaml(yaml);
+
+        Assert.NotNull(config);
+        Assert.Empty(diagnostics);
+        Assert.Equal(OutputStyle.TypedClientFlat, config.OutputStyle);
     }
 
     [Fact]
@@ -152,6 +167,8 @@ public class ConfigLoaderTests
         Assert.Equal(DiagnosticSeverity.Error, diag.Severity);
         Assert.Equal("AS303", diag.Code);
         Assert.Contains("Refit", diag.Message);
+        Assert.Contains("TypedClientStructured", diag.Message);
+        Assert.Contains("TypedClientFlat", diag.Message);
     }
 
     [Fact]

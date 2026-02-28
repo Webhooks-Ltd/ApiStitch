@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.0-alpha.5 — 2026-02-28
+
 ### Changed
 
 - ProblemDetails generation and error deserialization are now spec-signaled: clients only emit/use ProblemDetails support when non-success response contracts indicate `application/problem+json` or explicit ProblemDetails schema usage
 - Client class/interface names now normalize tag segments to PascalCase, preventing outputs like `PetStorepetClient` when specs use lowercase tags
+- Supported inline JSON success-response schemas (object and primitive forms) are now generated/typed instead of skipping operations with `AS401`; object shapes use deterministic synthetic models (including map-like `additionalProperties` responses), while unsupported inline compositions/nested inline objects still emit `AS401` with clearer remediation guidance
+- Typed client output now supports configurable layouts with `TypedClientStructured` (new default) and `TypedClientFlat`; structured mode routes files into deterministic `Contracts/`, `Clients/`, `Models/`, `Infrastructure/`, and `Configuration/` folders
 
 ## 0.1.0-alpha.4 — 2026-02-28
 

@@ -56,17 +56,23 @@ public class GenerationPipeline
         var resolveDiagnostics = ExternalTypeResolver.Resolve(specification, config);
         allDiagnostics.AddRange(resolveDiagnostics);
 
-        CSharpTypeMapper.MapAll(specification);
-
-        var (operations, clientName, opDiagnostics) = OperationTransformer.Transform(document, schemaMap, config);
+        var (operations, syntheticResponseSchemas, clientName, opDiagnostics) = OperationTransformer.Transform(document, schemaMap, config);
         allDiagnostics.AddRange(opDiagnostics);
+
+        var mergedSchemas = specification.Schemas
+            .Concat(syntheticResponseSchemas)
+            .OrderBy(s => s.Name, StringComparer.Ordinal)
+            .ToList();
 
         specification = specification with
         {
+            Schemas = mergedSchemas,
             Operations = operations,
             ClientName = clientName,
             HasProblemDetailsSupport = operations.Any(o => o.HasProblemDetailsSupport),
         };
+
+        CSharpTypeMapper.MapAll(specification);
 
         if (operations.Count > 0)
         {

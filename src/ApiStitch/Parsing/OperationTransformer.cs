@@ -14,18 +14,21 @@ public class OperationTransformer
     private readonly IReadOnlyDictionary<IOpenApiSchema, ApiSchema> _schemaMap;
     private readonly ApiStitchConfig _config;
     private readonly List<Diagnostic> _diagnostics = [];
+    private readonly List<ApiSchema> _syntheticResponseSchemas = [];
+    private readonly HashSet<string> _usedSyntheticSchemaNames;
     private string _clientName = null!;
 
     private OperationTransformer(IReadOnlyDictionary<IOpenApiSchema, ApiSchema> schemaMap, ApiStitchConfig config)
     {
         _schemaMap = schemaMap;
         _config = config;
+        _usedSyntheticSchemaNames = [.. schemaMap.Values.Select(s => s.Name)];
     }
 
     /// <summary>
     /// Transforms all operations in the OpenAPI document into <see cref="ApiOperation"/> instances.
     /// </summary>
-    public static (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) Transform(
+    public static (IReadOnlyList<ApiOperation> Operations, IReadOnlyList<ApiSchema> SyntheticResponseSchemas, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) Transform(
         OpenApiDocument document,
         IReadOnlyDictionary<IOpenApiSchema, ApiSchema> schemaMap,
         ApiStitchConfig config)
@@ -39,7 +42,7 @@ public class OperationTransformer
     private static bool IsNullable(IOpenApiSchema schema) => OpenApiSchemaHelpers.IsNullable(schema);
     private static bool HasUnrepresentableCompositionKeywords(IOpenApiSchema schema) => OpenApiSchemaHelpers.HasUnrepresentableCompositionKeywords(schema);
 
-    private (IReadOnlyList<ApiOperation> Operations, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformAll(OpenApiDocument document)
+    private (IReadOnlyList<ApiOperation> Operations, IReadOnlyList<ApiSchema> SyntheticResponseSchemas, string ClientName, IReadOnlyList<Diagnostic> Diagnostics) TransformAll(OpenApiDocument document)
     {
         _clientName = DeriveClientName(document);
         var operations = new List<ApiOperation>();
@@ -72,7 +75,7 @@ public class OperationTransformer
 
         DeduplicateMethodNames(operations);
 
-        return (operations, _clientName, _diagnostics);
+        return (operations, _syntheticResponseSchemas, _clientName, _diagnostics);
     }
 
     private string DeriveClientName(OpenApiDocument document)
@@ -125,7 +128,7 @@ public class OperationTransformer
         if (bodySkip)
             return [];
 
-        var (successResponse, responseSkip) = TransformSuccessResponse(operation.Responses, specPath);
+        var (successResponse, responseSkip) = TransformSuccessResponse(operation.Responses, specPath, methodName);
         if (responseSkip)
             return [];
 
@@ -797,7 +800,7 @@ public class OperationTransformer
         "text/plain",
     ];
 
-    private (ApiResponse? Response, bool SkipOperation) TransformSuccessResponse(OpenApiResponses? responses, string specPath)
+    private (ApiResponse? Response, bool SkipOperation) TransformSuccessResponse(OpenApiResponses? responses, string specPath, string methodName)
     {
         if (responses is null || responses.Count == 0)
             return (null, false);
@@ -810,17 +813,21 @@ public class OperationTransformer
         if (successResponses.Count == 0)
             return (null, false);
 
+        ApiResponse? firstNoContentResponse = null;
+        var foundUnsupportedInlineResponse = false;
+
         foreach (var (statusCodeStr, response) in successResponses)
         {
             var statusCode = int.Parse(statusCodeStr);
 
             if (response.Content is null || response.Content.Count == 0)
             {
-                return (new ApiResponse
+                firstNoContentResponse ??= new ApiResponse
                 {
                     StatusCode = statusCode,
                     Schema = null,
-                }, false);
+                };
+                continue;
             }
 
             var pick = SelectContentType(response.Content, ResponseContentTypePreference, specPath);
@@ -841,15 +848,18 @@ public class OperationTransformer
             {
                 case ContentKind.Json:
                 {
-                    var schema = ResolveResponseSchema(mediaTypeObj.Schema, specPath);
-                    if (schema is null && mediaTypeObj.Schema is not null)
+                    var responseSchemaSource = $"{specPath}/responses/{statusCodeStr}/content/{EscapeJsonPointerSegment(mediaType)}/schema";
+                    var resolved = ResolveResponseSchema(mediaTypeObj.Schema, specPath, responseSchemaSource, methodName, statusCode);
+
+                    if (!resolved.IsSupported)
                     {
                         _diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             DiagnosticCodes.UnsupportedInlineSchema,
-                            $"Response for status {statusCode} uses an inline complex schema. Only $ref and inline array of $ref are supported.",
-                            specPath));
-                        return (null, true);
+                            $"Response for status {statusCode} uses an unsupported inline response schema ({resolved.UnsupportedReason}). Move the schema to components and reference it via $ref.",
+                            responseSchemaSource));
+                        foundUnsupportedInlineResponse = true;
+                        continue;
                     }
 
                     return (new ApiResponse
@@ -857,7 +867,7 @@ public class OperationTransformer
                         StatusCode = statusCode,
                         ContentKind = ContentKind.Json,
                         MediaType = mediaType,
-                        Schema = schema,
+                        Schema = resolved.Schema,
                     }, false);
                 }
                 case ContentKind.OctetStream:
@@ -903,6 +913,12 @@ public class OperationTransformer
             }
         }
 
+        if (firstNoContentResponse is not null)
+            return (firstNoContentResponse, false);
+
+        if (foundUnsupportedInlineResponse)
+            return (null, true);
+
         var firstCode = int.Parse(successResponses.First().Key);
         return (new ApiResponse
         {
@@ -911,21 +927,44 @@ public class OperationTransformer
         }, false);
     }
 
-    private ApiSchema? ResolveResponseSchema(IOpenApiSchema? schema, string specPath)
+    private ResponseSchemaResolutionResult ResolveResponseSchema(
+        IOpenApiSchema? schema,
+        string specPath,
+        string responseSchemaSource,
+        string methodName,
+        int statusCode)
     {
         if (schema is null)
-            return null;
+            return new ResponseSchemaResolutionResult(true, null, null);
 
         var resolved = ResolveRef(schema);
         if (_schemaMap.TryGetValue(resolved, out var mapped))
-            return mapped;
+            return new ResponseSchemaResolutionResult(true, mapped, null);
 
-        if (GetBaseType(resolved) == JsonSchemaType.Array && resolved.Items != null)
+        if (HasUnsupportedInlineResponseComposition(resolved))
+            return new ResponseSchemaResolutionResult(false, null, "unsupported inline response composition");
+
+        var baseType = GetBaseType(resolved);
+
+        if (baseType == JsonSchemaType.Array)
         {
+            if (resolved.Items is null)
+            {
+                return new ResponseSchemaResolutionResult(true, new ApiSchema
+                {
+                    Name = "response",
+                    OriginalName = "response",
+                    Kind = SchemaKind.Array,
+                    ArrayItemSchema = null,
+                    HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
+                    Source = specPath,
+                }, null);
+            }
+
             var resolvedItems = ResolveRef(resolved.Items);
             if (_schemaMap.TryGetValue(resolvedItems, out var itemMapped))
             {
-                return new ApiSchema
+                return new ResponseSchemaResolutionResult(true, new ApiSchema
                 {
                     Name = $"{itemMapped.Name}List",
                     OriginalName = itemMapped.OriginalName,
@@ -933,14 +972,17 @@ public class OperationTransformer
                     ArrayItemSchema = itemMapped,
                     HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
-                };
+                }, null);
             }
 
+            if (HasUnsupportedInlineResponseComposition(resolvedItems))
+                return new ResponseSchemaResolutionResult(false, null, "unsupported inline response array item composition");
+
             var itemPrimitive = MapInlinePrimitive(resolvedItems);
-            if (itemPrimitive is not null)
+            var itemBaseType = GetBaseType(resolvedItems);
+            if (itemPrimitive is not null && itemBaseType is not null && itemBaseType != JsonSchemaType.Object)
             {
-                var baseType = GetBaseType(resolvedItems);
-                var typeName = baseType?.ToString().ToLowerInvariant() ?? "object";
+                var typeName = itemBaseType?.ToString().ToLowerInvariant() ?? "object";
                 var primSchema = new ApiSchema
                 {
                     Name = typeName,
@@ -950,7 +992,7 @@ public class OperationTransformer
                     HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolvedItems),
                     Source = specPath,
                 };
-                return new ApiSchema
+                return new ResponseSchemaResolutionResult(true, new ApiSchema
                 {
                     Name = "List",
                     OriginalName = "array",
@@ -958,12 +1000,200 @@ public class OperationTransformer
                     ArrayItemSchema = primSchema,
                     HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
                     Source = specPath,
-                };
+                }, null);
+            }
+
+            return new ResponseSchemaResolutionResult(false, null, "unsupported inline response array item schema");
+        }
+
+        if (baseType == JsonSchemaType.Object)
+            return BuildInlineResponseObjectSchema(resolved, methodName, statusCode, specPath, responseSchemaSource);
+
+        var primitiveType = MapInlinePrimitive(resolved);
+        if (primitiveType is not null && baseType is not null && baseType != JsonSchemaType.Object)
+        {
+            var typeName = baseType?.ToString().ToLowerInvariant() ?? "response";
+            return new ResponseSchemaResolutionResult(true, new ApiSchema
+            {
+                Name = typeName,
+                OriginalName = typeName,
+                Kind = SchemaKind.Primitive,
+                PrimitiveType = primitiveType,
+                IsNullable = IsNullable(resolved),
+                HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
+                Source = specPath,
+            }, null);
+        }
+
+        return new ResponseSchemaResolutionResult(false, null, "only $ref, inline array of supported items, and supported inline object schemas are supported");
+    }
+
+    private ResponseSchemaResolutionResult BuildInlineResponseObjectSchema(
+        IOpenApiSchema resolved,
+        string methodName,
+        int statusCode,
+        string specPath,
+        string responseSchemaSource)
+    {
+        if (HasUnsupportedInlineResponseComposition(resolved))
+            return new ResponseSchemaResolutionResult(false, null, "unsupported inline response composition");
+
+        var schemaName = CreateSyntheticResponseSchemaName(methodName, statusCode);
+        var requiredSet = resolved.Required;
+        var properties = new List<ApiProperty>();
+
+        if (resolved.Properties is not null)
+        {
+            foreach (var (propName, propSchema) in resolved.Properties)
+            {
+                var memberResult = TryResolveInlineResponseMemberSchema(propSchema, propName, specPath, responseSchemaSource);
+                if (!memberResult.IsSupported)
+                    return memberResult;
+
+                properties.Add(new ApiProperty
+                {
+                    Name = propName,
+                    CSharpName = NamingHelper.ToPascalCase(propName),
+                    Schema = memberResult.Schema!,
+                    IsRequired = requiredSet?.Contains(propName) == true,
+                });
             }
         }
 
-        return null;
+        ApiSchema? additionalPropertiesSchema = null;
+        if (resolved.AdditionalProperties is not null)
+        {
+            var mapResult = TryResolveInlineResponseAdditionalPropertiesSchema(resolved.AdditionalProperties, schemaName, specPath, responseSchemaSource);
+            if (!mapResult.IsSupported)
+                return mapResult;
+
+            additionalPropertiesSchema = mapResult.Schema;
+        }
+
+        var syntheticSchema = new ApiSchema
+        {
+            Name = schemaName,
+            OriginalName = schemaName,
+            Kind = SchemaKind.Object,
+            Description = resolved.Description,
+            Properties = properties,
+            IsNullable = IsNullable(resolved),
+            IsDeprecated = resolved.Deprecated,
+            HasAdditionalProperties = resolved.AdditionalProperties is not null,
+            AdditionalPropertiesSchema = additionalPropertiesSchema,
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
+            Source = responseSchemaSource,
+        };
+
+        _syntheticResponseSchemas.Add(syntheticSchema);
+        return new ResponseSchemaResolutionResult(true, syntheticSchema, null);
     }
+
+    private ResponseSchemaResolutionResult TryResolveInlineResponseMemberSchema(
+        IOpenApiSchema schema,
+        string memberName,
+        string specPath,
+        string responseSchemaSource)
+    {
+        var resolved = ResolveRef(schema);
+        if (_schemaMap.TryGetValue(resolved, out var mapped))
+            return new ResponseSchemaResolutionResult(true, mapped, null);
+
+        if (HasUnsupportedInlineResponseComposition(resolved))
+            return new ResponseSchemaResolutionResult(false, null, $"{memberName} has unsupported composition");
+
+        var baseType = GetBaseType(resolved);
+
+        if (baseType == JsonSchemaType.Array)
+        {
+            if (resolved.Items is null)
+                return new ResponseSchemaResolutionResult(true, new ApiSchema
+                {
+                    Name = memberName,
+                    OriginalName = memberName,
+                    Kind = SchemaKind.Array,
+                    ArrayItemSchema = null,
+                    Source = responseSchemaSource,
+                }, null);
+
+            var itemResult = TryResolveInlineResponseMemberSchema(resolved.Items, $"{memberName}Item", specPath, responseSchemaSource);
+            if (!itemResult.IsSupported)
+                return new ResponseSchemaResolutionResult(false, null, $"{memberName} has unsupported array item schema: {itemResult.UnsupportedReason}");
+
+            return new ResponseSchemaResolutionResult(true, new ApiSchema
+            {
+                Name = memberName,
+                OriginalName = memberName,
+                Kind = SchemaKind.Array,
+                ArrayItemSchema = itemResult.Schema,
+                HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
+                Source = responseSchemaSource,
+            }, null);
+        }
+
+        if (baseType == JsonSchemaType.Object)
+            return new ResponseSchemaResolutionResult(false, null, $"nested inline object member '{memberName}' is unsupported in v1");
+
+        var primitiveType = MapInlinePrimitive(resolved);
+        if (primitiveType is null)
+            return new ResponseSchemaResolutionResult(false, null, $"{memberName} has unsupported inline schema");
+
+        return new ResponseSchemaResolutionResult(true, new ApiSchema
+        {
+            Name = memberName,
+            OriginalName = memberName,
+            Kind = SchemaKind.Primitive,
+            PrimitiveType = primitiveType,
+            IsNullable = IsNullable(resolved),
+            HasUnrepresentableComposition = HasUnrepresentableCompositionKeywords(resolved),
+            Source = responseSchemaSource,
+        }, null);
+    }
+
+    private ResponseSchemaResolutionResult TryResolveInlineResponseAdditionalPropertiesSchema(
+        IOpenApiSchema schema,
+        string schemaName,
+        string specPath,
+        string responseSchemaSource)
+    {
+        var result = TryResolveInlineResponseMemberSchema(schema, "additionalProperties", specPath, responseSchemaSource);
+        if (!result.IsSupported)
+            return result;
+
+        if (result.Schema is { Kind: SchemaKind.Object })
+            return new ResponseSchemaResolutionResult(false, null, "additionalProperties inline object values are unsupported in v1");
+
+        if (result.Schema is { Kind: SchemaKind.Array, ArrayItemSchema.Kind: SchemaKind.Object })
+            return new ResponseSchemaResolutionResult(false, null, "additionalProperties array item inline objects are unsupported in v1");
+
+        var adjusted = result.Schema!;
+        adjusted.Name = $"{schemaName}AdditionalProperty";
+        return new ResponseSchemaResolutionResult(true, adjusted, null);
+    }
+
+    private string CreateSyntheticResponseSchemaName(string methodName, int statusCode)
+    {
+        var methodBase = methodName.EndsWith("Async", StringComparison.Ordinal)
+            ? methodName[..^5]
+            : methodName;
+        var baseName = $"{methodBase}{statusCode}Response";
+        return NamingHelper.ResolveCollision(baseName, _usedSyntheticSchemaNames);
+    }
+
+    private static bool HasUnsupportedInlineResponseComposition(IOpenApiSchema schema)
+    {
+        return schema.AllOf is { Count: > 0 }
+            || schema.OneOf is { Count: > 0 }
+            || schema.AnyOf is { Count: > 0 }
+            || schema.Not is not null;
+    }
+
+    private static string EscapeJsonPointerSegment(string value)
+    {
+        return value.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+    }
+
+    private readonly record struct ResponseSchemaResolutionResult(bool IsSupported, ApiSchema? Schema, string? UnsupportedReason);
 
     private bool HasProblemDetailsSupportSignal(OpenApiResponses? responses)
     {

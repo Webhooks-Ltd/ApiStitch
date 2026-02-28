@@ -120,24 +120,34 @@ Empty or whitespace-only entries in `excludeNamespaces` and `excludeTypes` SHALL
 
 ### Requirement: Support outputStyle configuration property
 
-The system SHALL parse an `outputStyle` property from the YAML config file. The value SHALL map to an `OutputStyle` enum. The default value SHALL be `OutputStyle.TypedClient`.
+The system SHALL support an optional `outputStyle` configuration property in `openapi-stitch.yaml`.
 
-#### Scenario: Config with outputStyle set to TypedClient
-- **WHEN** the config contains `outputStyle: TypedClient`
-- **THEN** ApiStitchConfig.OutputStyle = OutputStyle.TypedClient
+Supported values are:
+- `TypedClientStructured` (default)
+- `TypedClientFlat`
 
-#### Scenario: Config with no outputStyle
-- **WHEN** the config does not contain an `outputStyle` property
-- **THEN** ApiStitchConfig.OutputStyle defaults to OutputStyle.TypedClient
+When omitted, the system SHALL default to `TypedClientStructured`.
 
-#### Scenario: Config with outputStyle is case-insensitive
-- **WHEN** the config contains `outputStyle: typedclient` (lowercase)
-- **THEN** ApiStitchConfig.OutputStyle = OutputStyle.TypedClient (case-insensitive parsing)
+#### Scenario: outputStyle set to TypedClientStructured
+- **WHEN** config contains `outputStyle: TypedClientStructured`
+- **THEN** `ApiStitchConfig.OutputStyle` is set to `OutputStyle.TypedClientStructured`
 
-#### Scenario: Config with unknown outputStyle value (forward-looking validation)
-- **WHEN** the config contains `outputStyle: SomeUnknownStyle`
-- **THEN** the system returns an error diagnostic indicating the unrecognized output style
-- **THEN** the diagnostic lists the valid values (currently only `TypedClient`; `ExtensionMethods` and `Refit` will be added in future changes)
+#### Scenario: outputStyle set to TypedClientFlat
+- **WHEN** config contains `outputStyle: TypedClientFlat`
+- **THEN** `ApiStitchConfig.OutputStyle` is set to `OutputStyle.TypedClientFlat`
+
+#### Scenario: outputStyle missing
+- **WHEN** config omits `outputStyle`
+- **THEN** `ApiStitchConfig.OutputStyle` defaults to `OutputStyle.TypedClientStructured`
+
+#### Scenario: outputStyle case-insensitive parsing
+- **WHEN** config contains `outputStyle: typedclientflat` (different casing)
+- **THEN** value is parsed successfully as `OutputStyle.TypedClientFlat`
+
+#### Scenario: outputStyle invalid value
+- **WHEN** config contains `outputStyle: UnknownStyle`
+- **THEN** loader returns error diagnostic with code `AS302`
+- **THEN** diagnostic message lists supported values including `TypedClientStructured` and `TypedClientFlat`
 
 ### Requirement: Support clientName configuration property
 
