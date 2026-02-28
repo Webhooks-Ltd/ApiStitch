@@ -108,7 +108,9 @@ CLI flags (`--spec`, `--output`, `--namespace`, `--client-name`, `--output-style
 `outputStyle` layouts:
 
 - `TypedClientStructured` (default): files are grouped into `Contracts/`, `Clients/`, `Models/`, `Infrastructure/`, and `Configuration/`
+  and namespaces align to those folders (`{Root}.Contracts`, `{Root}.Clients`, `{Root}.Models`, `{Root}.Infrastructure`, `{Root}.Configuration`)
 - `TypedClientFlat`: all generated files are emitted at the output root
+  and generated types stay in the root namespace
 
 For remote `spec` URLs, ApiStitch applies a bounded fetch policy (30s timeout, 10 MiB response limit, max 5 redirects) and reports fetch/URL errors via diagnostics.
 

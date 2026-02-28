@@ -65,6 +65,7 @@ public class ScribanModelEmitter : IModelEmitter
 
     private GeneratedFile EmitRecord(ApiSchema schema, ApiSpecification spec, ApiStitchConfig config, List<Diagnostic> diagnostics)
     {
+        var modelsNamespace = BuildNamespace(config.Namespace, config.OutputStyle, "Models");
         var hasCollections = schema.Properties.Any(p =>
             p.Schema.Kind == SchemaKind.Array ||
             (p.Schema.CSharpTypeName?.StartsWith("IReadOnlyList<", StringComparison.Ordinal) ?? false));
@@ -90,7 +91,7 @@ public class ScribanModelEmitter : IModelEmitter
         }).ToList();
 
         var model = new ScriptObject();
-        model.Add("namespace", config.Namespace);
+        model.Add("namespace", modelsNamespace);
         model.Add("name", schema.Name);
         model.Add("base_name", schema.BaseSchema?.CSharpTypeName);
         model.Add("is_sealed", schema.BaseSchema != null);
@@ -111,6 +112,7 @@ public class ScribanModelEmitter : IModelEmitter
 
     private GeneratedFile EmitEnum(ApiSchema schema, ApiStitchConfig config)
     {
+        var modelsNamespace = BuildNamespace(config.Namespace, config.OutputStyle, "Models");
         var members = schema.EnumValues.Select(m => new
         {
             wire_value = m.Name,
@@ -118,7 +120,7 @@ public class ScribanModelEmitter : IModelEmitter
         }).ToList();
 
         var model = new ScriptObject();
-        model.Add("namespace", config.Namespace);
+        model.Add("namespace", modelsNamespace);
         model.Add("name", schema.Name);
         model.Add("is_deprecated", schema.IsDeprecated);
         model.Add("members", members);
@@ -132,6 +134,8 @@ public class ScribanModelEmitter : IModelEmitter
 
     private GeneratedFile EmitJsonContext(List<string> typeNames, ApiSpecification spec, ApiStitchConfig config)
     {
+        var modelsNamespace = BuildNamespace(config.Namespace, config.OutputStyle, "Models");
+        var infrastructureNamespace = BuildNamespace(config.Namespace, config.OutputStyle, "Infrastructure");
         var lastSegment = config.Namespace.Split('.').Last();
         var contextName = $"{lastSegment}JsonContext";
 
@@ -152,7 +156,8 @@ public class ScribanModelEmitter : IModelEmitter
             .ToList();
 
         var model = new ScriptObject();
-        model.Add("namespace", config.Namespace);
+        model.Add("namespace", infrastructureNamespace);
+        model.Add("models_namespace", modelsNamespace);
         model.Add("context_name", contextName);
         model.Add("type_names", jsonSerializableTypes);
         model.Add("collection_types", jsonSerializableCollections);
@@ -170,6 +175,13 @@ public class ScribanModelEmitter : IModelEmitter
         return outputStyle == OutputStyle.TypedClientStructured
             ? $"{folder}/{fileName}"
             : fileName;
+    }
+
+    private static string BuildNamespace(string rootNamespace, OutputStyle outputStyle, string role)
+    {
+        return outputStyle == OutputStyle.TypedClientStructured
+            ? $"{rootNamespace}.{role}"
+            : rootNamespace;
     }
 
     private static string GetPropertyTypeName(ApiProperty property)

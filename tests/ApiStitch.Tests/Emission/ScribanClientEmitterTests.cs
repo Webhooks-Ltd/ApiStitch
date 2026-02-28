@@ -805,5 +805,30 @@ public class ScribanClientEmitterTests
         Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiClientOptions.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiJsonOptions.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "Configuration/TestApiServiceCollectionExtensions.cs");
+
+        var contract = result.Files.First(f => f.RelativePath == "Contracts/ITestApiPetsClient.cs");
+        Assert.Contains("namespace TestApi.Generated.Contracts;", contract.Content);
+
+        var implementation = result.Files.First(f => f.RelativePath == "Clients/TestApiPetsClient.cs");
+        Assert.Contains("namespace TestApi.Generated.Clients;", implementation.Content);
+        Assert.Contains("using TestApi.Generated.Contracts;", implementation.Content);
+        Assert.Contains("using TestApi.Generated.Models;", implementation.Content);
+        Assert.Contains("using TestApi.Generated.Infrastructure;", implementation.Content);
+        Assert.Contains("using TestApi.Generated.Configuration;", implementation.Content);
+
+        var options = result.Files.First(f => f.RelativePath == "Configuration/TestApiClientOptions.cs");
+        Assert.Contains("namespace TestApi.Generated.Configuration;", options.Content);
+
+        var jsonOptions = result.Files.First(f => f.RelativePath == "Configuration/TestApiJsonOptions.cs");
+        Assert.Contains("namespace TestApi.Generated.Configuration;", jsonOptions.Content);
+        Assert.Contains("using TestApi.Generated.Infrastructure;", jsonOptions.Content);
+
+        var apiException = result.Files.First(f => f.RelativePath == "Infrastructure/ApiException.cs");
+        Assert.Contains("namespace TestApi.Generated.Infrastructure;", apiException.Content);
+
+        var registration = result.Files.First(f => f.RelativePath == "Configuration/TestApiServiceCollectionExtensions.cs");
+        Assert.Contains("namespace TestApi.Generated.Configuration;", registration.Content);
+        Assert.Contains("services.TryAddTransient<TestApi.Generated.Contracts.ITestApiPetsClient>", registration.Content);
+        Assert.Contains("new TestApi.Generated.Clients.TestApiPetsClient(", registration.Content);
     }
 }

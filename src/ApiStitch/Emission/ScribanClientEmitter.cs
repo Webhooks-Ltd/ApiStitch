@@ -50,8 +50,13 @@ public class ScribanClientEmitter : IClientEmitter
         var files = new List<GeneratedFile>();
         var diagnostics = new List<Diagnostic>();
         var clientName = spec.ClientName ?? "ApiClient";
-        var ns = config.Namespace;
-        var lastSegment = ns.Split('.').Last();
+        var rootNamespace = config.Namespace;
+        var contractsNamespace = BuildNamespace(rootNamespace, config.OutputStyle, "Contracts");
+        var clientsNamespace = BuildNamespace(rootNamespace, config.OutputStyle, "Clients");
+        var modelsNamespace = BuildNamespace(rootNamespace, config.OutputStyle, "Models");
+        var infrastructureNamespace = BuildNamespace(rootNamespace, config.OutputStyle, "Infrastructure");
+        var configurationNamespace = BuildNamespace(rootNamespace, config.OutputStyle, "Configuration");
+        var lastSegment = rootNamespace.Split('.').Last();
         var jsonContextName = $"{lastSegment}JsonContext";
         var jsonOptionsName = $"{clientName}JsonOptions";
         var optionsClassName = $"{clientName}ClientOptions";
@@ -84,29 +89,48 @@ public class ScribanClientEmitter : IClientEmitter
             var operations = group.OrderBy(o => o.CSharpMethodName, StringComparer.Ordinal).ToList();
             var opModels = BuildOperationModels(operations, queryEnums);
 
-            files.Add(EmitInterface(ns, interfaceName, opModels, outputStyle));
-            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, hasProblemDetailsSupport, opModels, outputStyle));
+            files.Add(EmitInterface(contractsNamespace, modelsNamespace, interfaceName, opModels, outputStyle));
+            files.Add(EmitImplementation(
+                clientsNamespace,
+                contractsNamespace,
+                modelsNamespace,
+                infrastructureNamespace,
+                configurationNamespace,
+                interfaceName,
+                className,
+                clientName,
+                jsonOptionsName,
+                problemDetailsTypeName,
+                hasProblemDetailsSupport,
+                opModels,
+                outputStyle));
 
-            tagClients.Add(new { interface_name = interfaceName, class_name = className });
+            tagClients.Add(new
+            {
+                interface_name = interfaceName,
+                class_name = className,
+                interface_type = BuildQualifiedType(contractsNamespace, interfaceName),
+                class_type = BuildQualifiedType(clientsNamespace, className),
+            });
         }
 
         if (hasProblemDetailsSupport && problemDetailsSchema is not { IsExternal: true })
-            files.Add(EmitProblemDetails(ns, outputStyle));
-        files.Add(EmitApiException(ns, problemDetailsTypeName, hasProblemDetailsSupport, outputStyle));
-        files.Add(EmitClientOptions(ns, clientName, optionsClassName, outputStyle));
-        files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName, outputStyle));
-        files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients, outputStyle));
+            files.Add(EmitProblemDetails(infrastructureNamespace, outputStyle));
+        files.Add(EmitApiException(infrastructureNamespace, problemDetailsTypeName, hasProblemDetailsSupport, outputStyle));
+        files.Add(EmitClientOptions(configurationNamespace, clientName, optionsClassName, outputStyle));
+        files.Add(EmitJsonOptionsWrapper(configurationNamespace, infrastructureNamespace, clientName, jsonOptionsName, jsonContextName, outputStyle));
+        files.Add(EmitDiRegistration(configurationNamespace, clientName, optionsClassName, jsonOptionsName, tagClients, outputStyle));
 
         var hasStreamResponse = spec.Operations.Any(o =>
             o.SuccessResponse?.ContentKind == ContentKind.OctetStream);
         if (hasStreamResponse)
-            files.Add(EmitFileResponse(ns, outputStyle));
+            files.Add(EmitFileResponse(infrastructureNamespace, outputStyle));
 
         foreach (var enumName in queryEnums.OrderBy(n => n, StringComparer.Ordinal))
         {
             var enumSchema = spec.Schemas.FirstOrDefault(s => s.Name == enumName && s.Kind == SchemaKind.Enum);
             if (enumSchema is not null)
-                files.Add(EmitEnumExtensions(ns, enumSchema, outputStyle));
+                files.Add(EmitEnumExtensions(configurationNamespace, modelsNamespace, enumSchema, outputStyle));
         }
 
         files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.Ordinal));
@@ -533,10 +557,16 @@ public class ScribanClientEmitter : IClientEmitter
         return path;
     }
 
-    private GeneratedFile EmitInterface(string ns, string interfaceName, List<object> operations, OutputStyle outputStyle)
+    private GeneratedFile EmitInterface(
+        string contractsNamespace,
+        string modelsNamespace,
+        string interfaceName,
+        List<object> operations,
+        OutputStyle outputStyle)
     {
         var model = new ScriptObject();
-        model.Add("namespace", ns);
+        model.Add("namespace", contractsNamespace);
+        model.Add("models_namespace", modelsNamespace);
         model.Add("interface_name", interfaceName);
         model.Add("operations", operations);
 
@@ -544,8 +574,19 @@ public class ScribanClientEmitter : IClientEmitter
     }
 
     private GeneratedFile EmitImplementation(
-        string ns, string interfaceName, string className, string clientName,
-        string jsonOptionsName, string problemDetailsTypeName, bool hasProblemDetailsSupport, List<object> operations, OutputStyle outputStyle)
+        string clientsNamespace,
+        string contractsNamespace,
+        string modelsNamespace,
+        string infrastructureNamespace,
+        string configurationNamespace,
+        string interfaceName,
+        string className,
+        string clientName,
+        string jsonOptionsName,
+        string problemDetailsTypeName,
+        bool hasProblemDetailsSupport,
+        List<object> operations,
+        OutputStyle outputStyle)
     {
         var hasQueryMethods = operations.Any(o =>
         {
@@ -554,7 +595,11 @@ public class ScribanClientEmitter : IClientEmitter
         });
 
         var model = new ScriptObject();
-        model.Add("namespace", ns);
+        model.Add("namespace", clientsNamespace);
+        model.Add("contracts_namespace", contractsNamespace);
+        model.Add("models_namespace", modelsNamespace);
+        model.Add("infrastructure_namespace", infrastructureNamespace);
+        model.Add("configuration_namespace", configurationNamespace);
         model.Add("interface_name", interfaceName);
         model.Add("class_name", className);
         model.Add("client_name", clientName);
@@ -603,10 +648,17 @@ public class ScribanClientEmitter : IClientEmitter
         return RenderTemplate(_optionsTemplate, RoutePath(outputStyle, "Configuration", $"{optionsClassName}.cs"), model);
     }
 
-    private GeneratedFile EmitJsonOptionsWrapper(string ns, string clientName, string jsonOptionsName, string jsonContextName, OutputStyle outputStyle)
+    private GeneratedFile EmitJsonOptionsWrapper(
+        string namespaceName,
+        string infrastructureNamespace,
+        string clientName,
+        string jsonOptionsName,
+        string jsonContextName,
+        OutputStyle outputStyle)
     {
         var model = new ScriptObject();
-        model.Add("namespace", ns);
+        model.Add("namespace", namespaceName);
+        model.Add("infrastructure_namespace", infrastructureNamespace);
         model.Add("client_name", clientName);
         model.Add("json_options_name", jsonOptionsName);
         model.Add("json_context_name", jsonContextName);
@@ -630,7 +682,7 @@ public class ScribanClientEmitter : IClientEmitter
         return RenderTemplate(_diRegistrationTemplate, RoutePath(outputStyle, "Configuration", $"{extensionsClassName}.cs"), model);
     }
 
-    private GeneratedFile EmitEnumExtensions(string ns, ApiSchema enumSchema, OutputStyle outputStyle)
+    private GeneratedFile EmitEnumExtensions(string ns, string modelsNamespace, ApiSchema enumSchema, OutputStyle outputStyle)
     {
         var members = enumSchema.EnumValues.Select(m => new
         {
@@ -640,7 +692,9 @@ public class ScribanClientEmitter : IClientEmitter
 
         var model = new ScriptObject();
         model.Add("namespace", ns);
+        model.Add("models_namespace", modelsNamespace);
         model.Add("enum_name", enumSchema.Name);
+        model.Add("enum_type", ns == modelsNamespace ? enumSchema.Name : BuildQualifiedType(modelsNamespace, enumSchema.Name));
         model.Add("members", members);
 
         return RenderTemplate(_enumExtensionsTemplate, RoutePath(outputStyle, "Configuration", $"{enumSchema.Name}Extensions.cs"), model);
@@ -651,6 +705,18 @@ public class ScribanClientEmitter : IClientEmitter
         return outputStyle == OutputStyle.TypedClientStructured
             ? $"{folder}/{fileName}"
             : fileName;
+    }
+
+    private static string BuildNamespace(string rootNamespace, OutputStyle outputStyle, string role)
+    {
+        return outputStyle == OutputStyle.TypedClientStructured
+            ? $"{rootNamespace}.{role}"
+            : rootNamespace;
+    }
+
+    private static string BuildQualifiedType(string namespaceName, string typeName)
+    {
+        return $"{namespaceName}.{typeName}";
     }
 
     private static string GetTypeName(ApiSchema schema)

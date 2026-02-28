@@ -36,8 +36,8 @@ public static class {{ extensions_class_name }}
         });
 
 {{~ for client in tag_clients ~}}
-        services.TryAddTransient<{{ client.interface_name }}>(sp =>
-            new {{ client.class_name }}(
+        services.TryAddTransient<{{ client.interface_type }}>(sp =>
+            new {{ client.class_type }}(
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<{{ json_options_name }}>()));
 {{~ end ~}}

@@ -11,6 +11,18 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+{{~ if contracts_namespace != namespace ~}}
+using {{ contracts_namespace }};
+{{~ end ~}}
+{{~ if models_namespace != namespace ~}}
+using {{ models_namespace }};
+{{~ end ~}}
+{{~ if infrastructure_namespace != namespace ~}}
+using {{ infrastructure_namespace }};
+{{~ end ~}}
+{{~ if configuration_namespace != namespace ~}}
+using {{ configuration_namespace }};
+{{~ end ~}}
 
 namespace {{ namespace }};
 

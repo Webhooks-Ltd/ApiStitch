@@ -1,8 +1,5 @@
-# output-layouts Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change configurable-output-layouts. Update Purpose after archive.
-## Requirements
 ### Requirement: Support selectable generated file layouts
 
 The system SHALL support two generated file layouts for TypedClient output: `TypedClientStructured` and `TypedClientFlat`.
@@ -25,12 +22,3 @@ When `TypedClientFlat` is selected, generated namespaces SHALL remain `{RootName
 - **WHEN** output style is `TypedClientFlat`
 - **THEN** generated files are emitted in a flat single output folder
 - **THEN** generated files use the root namespace without role suffixes
-
-### Requirement: Default output layout is structured
-
-The system SHALL default to structured layout when output style is not explicitly configured.
-
-#### Scenario: output style omitted
-- **WHEN** config and CLI do not specify output style
-- **THEN** generation behaves as `TypedClientStructured`
-

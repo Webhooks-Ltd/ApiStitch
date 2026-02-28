@@ -3,6 +3,9 @@
 using System.Collections.Generic;
 {{- end }}
 using System.Text.Json.Serialization;
+{{~ if models_namespace != namespace ~}}
+using {{ models_namespace }};
+{{~ end ~}}
 
 namespace {{ namespace }};
 

@@ -13,11 +13,17 @@ internal static class RoslynCompilationHelper
         bool excludeJsonContext = false)
     {
         var filesToCompile = files.AsEnumerable();
+        var excludedJsonOptionsFiles = new List<GeneratedFile>();
 
         if (excludeJsonContext)
         {
+            excludedJsonOptionsFiles = files
+                .Where(f => f.RelativePath.Contains("JsonOptions", StringComparison.Ordinal))
+                .ToList();
+
             filesToCompile = filesToCompile
-                .Where(f => !f.RelativePath.Contains("JsonContext") && !f.RelativePath.Contains("JsonOptions"));
+                .Where(f => !f.RelativePath.Contains("JsonContext", StringComparison.Ordinal)
+                    && !f.RelativePath.Contains("JsonOptions", StringComparison.Ordinal));
         }
 
         var filteredFiles = filesToCompile.ToList();
@@ -34,11 +40,14 @@ internal static class RoslynCompilationHelper
 
         if (excludeJsonContext && hasClientFiles)
         {
-            var ns = DetectNamespace(filteredFiles);
-            syntaxTrees.Add(CSharpSyntaxTree.ParseText(
-                BuildJsonOptionsStub(ns, filteredFiles),
-                parseOptions,
-                path: "JsonOptionsStub.cs"));
+            var stubs = BuildJsonOptionsStubs(excludedJsonOptionsFiles, filteredFiles);
+            foreach (var stub in stubs)
+            {
+                syntaxTrees.Add(CSharpSyntaxTree.ParseText(
+                    stub.Content,
+                    parseOptions,
+                    path: stub.Path));
+            }
         }
 
         var references = GetMetadataReferences();
@@ -65,6 +74,37 @@ internal static class RoslynCompilationHelper
         return (true, diagnostics, assembly);
     }
 
+    private static IReadOnlyList<(string Path, string Content)> BuildJsonOptionsStubs(
+        List<GeneratedFile> excludedJsonOptionsFiles,
+        List<GeneratedFile> filesToCompile)
+    {
+        var stubs = new List<(string Path, string Content)>();
+        var added = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var file in excludedJsonOptionsFiles)
+        {
+            var namespaceMatch = System.Text.RegularExpressions.Regex.Match(file.Content, @"namespace\s+([^;\s]+)");
+            var classMatch = System.Text.RegularExpressions.Regex.Match(file.Content, @"internal\s+sealed\s+class\s+(\w+JsonOptions)");
+            if (!namespaceMatch.Success || !classMatch.Success)
+                continue;
+
+            var ns = namespaceMatch.Groups[1].Value;
+            var className = classMatch.Groups[1].Value;
+            var key = $"{ns}|{className}";
+            if (!added.Add(key))
+                continue;
+
+            stubs.Add(($"{className}.Stub.cs", BuildJsonOptionsStub(ns, className)));
+        }
+
+        if (stubs.Count > 0)
+            return stubs;
+
+        var fallbackNamespace = DetectNamespace(filesToCompile);
+        stubs.Add(("JsonOptionsStub.cs", BuildJsonOptionsStub(fallbackNamespace, "JsonOptionsStub")));
+        return stubs;
+    }
+
     private static string DetectNamespace(List<GeneratedFile> files)
     {
         foreach (var f in files)
@@ -78,20 +118,8 @@ internal static class RoslynCompilationHelper
         return "Generated.Models";
     }
 
-    private static string BuildJsonOptionsStub(string ns, List<GeneratedFile> files)
+    private static string BuildJsonOptionsStub(string ns, string className)
     {
-        var className = "JsonOptionsStub";
-        foreach (var f in files)
-        {
-            if (!f.RelativePath.EndsWith("Client.cs")) continue;
-            var match = System.Text.RegularExpressions.Regex.Match(f.Content, @"(\w+JsonOptions)\s+jsonOptions");
-            if (match.Success)
-            {
-                className = match.Groups[1].Value;
-                break;
-            }
-        }
-
         return $$"""
             #nullable enable
             using System.Text.Json;

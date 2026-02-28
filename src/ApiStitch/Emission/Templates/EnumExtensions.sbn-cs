@@ -1,16 +1,19 @@
 #nullable enable
 using System;
 using System.CodeDom.Compiler;
+{{~ if models_namespace != namespace ~}}
+using {{ models_namespace }};
+{{~ end ~}}
 
 namespace {{ namespace }};
 
 [GeneratedCode("ApiStitch", null)]
 internal static class {{ enum_name }}Extensions
 {
-    public static string ToQueryString(this {{ enum_name }} value) => value switch
+    public static string ToQueryString(this {{ enum_type }} value) => value switch
     {
 {{~ for member in members ~}}
-        {{ enum_name }}.{{ member.csharp_name }} => "{{ member.wire_value }}",
+        {{ enum_type }}.{{ member.csharp_name }} => "{{ member.wire_value }}",
 {{~ end ~}}
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };

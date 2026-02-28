@@ -697,6 +697,53 @@ public class GenerationTests
         Assert.True(success, FormatDiagnostics(compileDiags));
     }
 
+    [Fact]
+    public void StructuredLayout_NamespacesAlignWithFolders_AndCompile()
+    {
+        var config = new ApiStitchConfig
+        {
+            Spec = SpecPath("petstore.yaml"),
+            Namespace = "Generated.PetStore",
+            OutputStyle = OutputStyle.TypedClientStructured,
+        };
+
+        var result = new GenerationPipeline().Generate(config);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.Contains(result.Files, f => f.RelativePath.StartsWith("Contracts/", StringComparison.Ordinal));
+        Assert.Contains(result.Files, f => f.RelativePath.StartsWith("Clients/", StringComparison.Ordinal));
+        Assert.Contains(result.Files, f => f.RelativePath.StartsWith("Models/", StringComparison.Ordinal));
+        Assert.Contains(result.Files, f => f.RelativePath.StartsWith("Infrastructure/", StringComparison.Ordinal));
+        Assert.Contains(result.Files, f => f.RelativePath.StartsWith("Configuration/", StringComparison.Ordinal));
+
+        var contract = result.Files.First(f =>
+            f.RelativePath.StartsWith("Contracts/", StringComparison.Ordinal)
+            && f.RelativePath.EndsWith("Client.cs", StringComparison.Ordinal)
+            && Path.GetFileName(f.RelativePath).StartsWith("I", StringComparison.Ordinal));
+        Assert.Contains("namespace Generated.PetStore.Contracts;", contract.Content);
+
+        var implementation = result.Files.First(f =>
+            f.RelativePath.StartsWith("Clients/", StringComparison.Ordinal)
+            && f.RelativePath.EndsWith("Client.cs", StringComparison.Ordinal)
+            && !Path.GetFileName(f.RelativePath).StartsWith("I", StringComparison.Ordinal));
+        Assert.Contains("namespace Generated.PetStore.Clients;", implementation.Content);
+        Assert.Contains("using Generated.PetStore.Contracts;", implementation.Content);
+        Assert.Contains("using Generated.PetStore.Models;", implementation.Content);
+        Assert.Contains("using Generated.PetStore.Infrastructure;", implementation.Content);
+        Assert.Contains("using Generated.PetStore.Configuration;", implementation.Content);
+
+        var model = result.Files.First(f => f.RelativePath == "Models/Pet.cs");
+        Assert.Contains("namespace Generated.PetStore.Models;", model.Content);
+
+        var contextFile = result.Files.First(f => f.RelativePath.EndsWith("JsonContext.cs", StringComparison.Ordinal) && f.RelativePath.StartsWith("Infrastructure/", StringComparison.Ordinal));
+        Assert.Contains("namespace Generated.PetStore.Infrastructure;", contextFile.Content);
+        Assert.Contains("using Generated.PetStore.Models;", contextFile.Content);
+
+        var (success, compileDiags, _) = RoslynCompilationHelper.Compile(result.Files, excludeJsonContext: true);
+        Assert.True(success, FormatDiagnostics(compileDiags));
+    }
+
     private static string FormatDiagnostics(IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> diagnostics) =>
         $"Compilation failed:\n{string.Join("\n", diagnostics.Select(d => $"  {d.Location}: {d.GetMessage()}"))}";
 }

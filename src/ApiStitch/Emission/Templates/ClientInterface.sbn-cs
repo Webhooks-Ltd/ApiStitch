@@ -5,6 +5,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+{{~ if models_namespace != namespace ~}}
+using {{ models_namespace }};
+{{~ end ~}}
 
 namespace {{ namespace }};
 

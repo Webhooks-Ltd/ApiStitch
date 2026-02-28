@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.0-alpha.6 — 2026-02-28
+
+### Changed
+
+- In `TypedClientStructured` layout, generated namespaces now align with folder roles (`Contracts`, `Clients`, `Models`, `Infrastructure`, `Configuration`); `TypedClientFlat` continues to use the root namespace
+
 ## 0.1.0-alpha.5 — 2026-02-28
 
 ### Changed

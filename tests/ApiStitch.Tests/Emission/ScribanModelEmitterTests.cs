@@ -167,5 +167,12 @@ public class ScribanModelEmitterTests
 
         Assert.Contains(result.Files, f => f.RelativePath == "Models/Category.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "Infrastructure/ModelsJsonContext.cs");
+
+        var modelFile = result.Files.First(f => f.RelativePath == "Models/Category.cs");
+        Assert.Contains("namespace TestApi.Models.Models;", modelFile.Content);
+
+        var contextFile = result.Files.First(f => f.RelativePath == "Infrastructure/ModelsJsonContext.cs");
+        Assert.Contains("namespace TestApi.Models.Infrastructure;", contextFile.Content);
+        Assert.Contains("using TestApi.Models.Models;", contextFile.Content);
     }
 }

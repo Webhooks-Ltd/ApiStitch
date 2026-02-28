@@ -2,6 +2,9 @@
 using System.CodeDom.Compiler;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+{{~ if infrastructure_namespace != namespace ~}}
+using {{ infrastructure_namespace }};
+{{~ end ~}}
 
 namespace {{ namespace }};
 

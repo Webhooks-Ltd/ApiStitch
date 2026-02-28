@@ -17,6 +17,7 @@ public class DeserializationRoundTripTests
         {
             Spec = SpecPath("petstore.yaml"),
             Namespace = "RoundTrip.Models",
+            OutputStyle = OutputStyle.TypedClientFlat,
         };
 
         var result = new GenerationPipeline().Generate(config);
