@@ -39,4 +39,7 @@ public class ApiOperation
 
     /// <summary>Diagnostics collected during transformation of this operation.</summary>
     public List<Diagnostic> Diagnostics { get; } = [];
+
+    /// <summary>Whether this operation signals ProblemDetails support via non-success response contracts.</summary>
+    public bool HasProblemDetailsSupport { get; init; }
 }

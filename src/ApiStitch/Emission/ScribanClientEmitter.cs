@@ -3,6 +3,7 @@ using ApiStitch.Configuration;
 using ApiStitch.Diagnostics;
 using ApiStitch.Generation;
 using ApiStitch.Model;
+using ApiStitch.Parsing;
 using ApiStitch.TypeMapping;
 using Scriban;
 using Scriban.Runtime;
@@ -60,7 +61,10 @@ public class ScribanClientEmitter : IClientEmitter
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
 
-        var problemDetailsSchema = spec.Schemas.FirstOrDefault(s => s.Name == "ProblemDetails");
+        var hasProblemDetailsSupport = spec.HasProblemDetailsSupport;
+        var problemDetailsSchema = hasProblemDetailsSupport
+            ? spec.Schemas.FirstOrDefault(s => s.Name == "ProblemDetails")
+            : null;
         var problemDetailsTypeName = problemDetailsSchema is { IsExternal: true }
             ? problemDetailsSchema.CSharpTypeName!
             : "ProblemDetails";
@@ -72,21 +76,22 @@ public class ScribanClientEmitter : IClientEmitter
         {
             var tag = group.Key;
             var isDefault = tag == clientName;
-            var interfaceName = isDefault ? $"I{clientName}Client" : $"I{clientName}{tag}Client";
-            var className = isDefault ? $"{clientName}Client" : $"{clientName}{tag}Client";
+            var normalizedTag = NormalizeTagName(tag);
+            var interfaceName = isDefault ? $"I{clientName}Client" : $"I{clientName}{normalizedTag}Client";
+            var className = isDefault ? $"{clientName}Client" : $"{clientName}{normalizedTag}Client";
 
             var operations = group.OrderBy(o => o.CSharpMethodName, StringComparer.Ordinal).ToList();
             var opModels = BuildOperationModels(operations, queryEnums);
 
             files.Add(EmitInterface(ns, interfaceName, opModels));
-            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, opModels));
+            files.Add(EmitImplementation(ns, interfaceName, className, clientName, jsonOptionsName, problemDetailsTypeName, hasProblemDetailsSupport, opModels));
 
             tagClients.Add(new { interface_name = interfaceName, class_name = className });
         }
 
-        if (problemDetailsSchema is not { IsExternal: true })
+        if (hasProblemDetailsSupport && problemDetailsSchema is not { IsExternal: true })
             files.Add(EmitProblemDetails(ns));
-        files.Add(EmitApiException(ns, problemDetailsTypeName));
+        files.Add(EmitApiException(ns, problemDetailsTypeName, hasProblemDetailsSupport));
         files.Add(EmitClientOptions(ns, clientName, optionsClassName));
         files.Add(EmitJsonOptionsWrapper(ns, clientName, jsonOptionsName, jsonContextName));
         files.Add(EmitDiRegistration(ns, clientName, optionsClassName, jsonOptionsName, tagClients));
@@ -536,7 +541,7 @@ public class ScribanClientEmitter : IClientEmitter
 
     private GeneratedFile EmitImplementation(
         string ns, string interfaceName, string className, string clientName,
-        string jsonOptionsName, string problemDetailsTypeName, List<object> operations)
+        string jsonOptionsName, string problemDetailsTypeName, bool hasProblemDetailsSupport, List<object> operations)
     {
         var hasQueryMethods = operations.Any(o =>
         {
@@ -552,16 +557,18 @@ public class ScribanClientEmitter : IClientEmitter
         model.Add("json_options_name", jsonOptionsName);
         model.Add("operations", operations);
         model.Add("has_query_methods", hasQueryMethods);
+        model.Add("has_problem_details", hasProblemDetailsSupport);
         model.Add("problem_details_type", problemDetailsTypeName);
 
         return RenderTemplate(_implementationTemplate, $"{className}.cs", model);
     }
 
-    private GeneratedFile EmitApiException(string ns, string problemDetailsTypeName)
+    private GeneratedFile EmitApiException(string ns, string problemDetailsTypeName, bool hasProblemDetailsSupport)
     {
         var model = new ScriptObject();
         model.Add("namespace", ns);
         model.Add("problem_details_type", problemDetailsTypeName);
+        model.Add("has_problem_details", hasProblemDetailsSupport);
 
         return RenderTemplate(_exceptionTemplate, "ApiException.cs", model);
     }
@@ -638,6 +645,20 @@ public class ScribanClientEmitter : IClientEmitter
     private static string GetTypeName(ApiSchema schema)
     {
         return schema.CSharpTypeName ?? CSharpTypeMapper.MapSchema(schema);
+    }
+
+    private static string NormalizeTagName(string tag)
+    {
+        var pascal = NamingHelper.ToPascalCase(tag);
+        var cleaned = new string(pascal.Where(char.IsLetterOrDigit).ToArray());
+
+        if (cleaned.Length == 0)
+            return "Tag";
+
+        if (char.IsDigit(cleaned[0]))
+            return $"Tag{cleaned}";
+
+        return cleaned;
     }
 
     private static bool IsValueType(ApiSchema schema)

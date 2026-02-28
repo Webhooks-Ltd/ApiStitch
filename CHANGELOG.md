@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- ProblemDetails generation and error deserialization are now spec-signaled: clients only emit/use ProblemDetails support when non-success response contracts indicate `application/problem+json` or explicit ProblemDetails schema usage
+- Client class/interface names now normalize tag segments to PascalCase, preventing outputs like `PetStorepetClient` when specs use lowercase tags
+
 ## 0.1.0-alpha.4 — 2026-02-28
 
 ### Added

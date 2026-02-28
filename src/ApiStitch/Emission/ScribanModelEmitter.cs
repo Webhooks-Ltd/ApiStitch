@@ -32,6 +32,9 @@ public class ScribanModelEmitter : IModelEmitter
         {
             if (schema.IsExternal)
             {
+                if (!spec.HasProblemDetailsSupport && IsProblemDetailsType(schema))
+                    continue;
+
                 if (schema.Kind is SchemaKind.Object or SchemaKind.Enum)
                     typeNames.Add(schema.CSharpTypeName!);
                 continue;
@@ -50,7 +53,7 @@ public class ScribanModelEmitter : IModelEmitter
             }
         }
 
-        if (spec.Operations.Count > 0 && !spec.Schemas.Any(s => s.Name == "ProblemDetails"))
+        if (spec.HasProblemDetailsSupport && !spec.Schemas.Any(s => s.Name == "ProblemDetails"))
             typeNames.Add("ProblemDetails");
 
         files.Add(EmitJsonContext(typeNames, spec, config));
@@ -196,6 +199,15 @@ public class ScribanModelEmitter : IModelEmitter
         return schema.IsExternal
             ? schema.CSharpTypeName ?? CSharpTypeMapper.MapSchema(schema)
             : schema.Name;
+    }
+
+    private static bool IsProblemDetailsType(ApiSchema schema)
+    {
+        if (string.Equals(schema.Name, "ProblemDetails", StringComparison.Ordinal)
+            || string.Equals(schema.OriginalName, "ProblemDetails", StringComparison.Ordinal))
+            return true;
+
+        return schema.ExternalClrTypeName?.EndsWith(".ProblemDetails", StringComparison.Ordinal) == true;
     }
 
     private static Template LoadTemplate(string name)

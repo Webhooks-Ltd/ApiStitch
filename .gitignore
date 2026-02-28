@@ -53,6 +53,14 @@ desktop.ini
 ## Claude Code
 .claude/
 
+## Local AI/tooling directories
+.codex/
+.gemini/
+.dotnet-home/
+
+## Local publish/build artifacts
+artifacts/
+
 ## Misc
 *.log
 *.tmp

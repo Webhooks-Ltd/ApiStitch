@@ -65,6 +65,7 @@ public class GenerationPipeline
         {
             Operations = operations,
             ClientName = clientName,
+            HasProblemDetailsSupport = operations.Any(o => o.HasProblemDetailsSupport),
         };
 
         if (operations.Count > 0)

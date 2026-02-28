@@ -200,23 +200,15 @@ JSON serialization/deserialization path selection SHALL use schema compatibility
 
 ### Requirement: Emit ApiException class
 
-The system SHALL emit a `public sealed class ApiException : HttpRequestException` with `ResponseBody` (string?, truncated at 8KB), `ResponseHeaders`, and `Problem` (ProblemDetails?) properties. StatusCode SHALL be passed through the base constructor.
+`ApiException` generation SHALL remain coherent with conditional ProblemDetails support.
 
-#### Scenario: ApiException structure
-- **WHEN** ApiException is emitted
-- **THEN** it extends `HttpRequestException`
-- **THEN** the constructor passes `HttpStatusCode` to the base constructor's `statusCode` parameter
-- **THEN** the constructor accepts `HttpStatusCode statusCode`, `string? responseBody`, `HttpResponseHeaders? responseHeaders`, and `ProblemDetails? problem = null`
-- **THEN** the message format is `"HTTP {(int)statusCode} ({statusCode})"`
-- **THEN** `ResponseBody` is `string?`, `ResponseHeaders` is `HttpResponseHeaders?`, and `Problem` is `ProblemDetails?`
+#### Scenario: ApiException without ProblemDetails signal
+- **WHEN** ProblemDetails support is not signaled by the specification
+- **THEN** generated `ApiException` does not require a generated `ProblemDetails` type reference
 
-#### Scenario: ApiException is not prefixed with API name
-- **WHEN** the emitter generates exception code
-- **THEN** the class is named `ApiException` (shared across APIs in the same namespace)
-
-#### Scenario: Namespace deduplication
-- **WHEN** two APIs share the same namespace
-- **THEN** only one `ApiException.cs` file is emitted
+#### Scenario: ApiException with ProblemDetails signal
+- **WHEN** ProblemDetails support is signaled
+- **THEN** generated `ApiException` preserves ProblemDetails attachment behavior for qualifying error responses
 
 ### Requirement: Emit EnsureSuccessAsync helper in each client
 
@@ -437,20 +429,13 @@ The system SHALL conditionally emit a `public sealed class FileResponse : IAsync
 
 ### Requirement: Emit ProblemDetails record type
 
-The system SHALL conditionally emit a `public sealed record ProblemDetails` when client emission is active (i.e., at least one operation exists). The record SHALL use non-positional syntax with `init` properties and `[JsonPropertyName]` attributes for robust STJ source generation.
+The system SHALL conditionally emit a `public sealed record ProblemDetails` only when the OpenAPI contract signals ProblemDetails support. Contract signals include non-2xx `application/problem+json` responses or explicit ProblemDetails schema usage.
 
-#### Scenario: ProblemDetails structure
-- **WHEN** `ProblemDetails` is emitted
-- **THEN** it is a `public sealed record ProblemDetails` with five `init` properties: `Type` (string?), `Title` (string?), `Status` (int?), `Detail` (string?), `Instance` (string?)
-- **THEN** each property has `[JsonPropertyName("type")]` (etc.) for explicit wire-name mapping
-- **THEN** it has `[GeneratedCode("ApiStitch", null)]` attribute
-
-#### Scenario: ProblemDetails is generated (not from ASP.NET Core)
-- **WHEN** the emitter generates ProblemDetails
-- **THEN** the type is in the generated output namespace, NOT `Microsoft.AspNetCore.Mvc.ProblemDetails`
-- **THEN** no ASP.NET Core dependency is introduced
-
-#### Scenario: ProblemDetails emitted conditionally
-- **WHEN** no operations exist (model-only generation)
+#### Scenario: ProblemDetails omitted when no spec signal
+- **WHEN** a specification has operations but no non-2xx `application/problem+json` responses and no explicit ProblemDetails schema usage
 - **THEN** no `ProblemDetails.cs` file is emitted
+
+#### Scenario: ProblemDetails emitted when problem+json exists
+- **WHEN** any non-2xx response advertises `application/problem+json`
+- **THEN** `ProblemDetails.cs` is emitted unless an external ProblemDetails type is selected
 

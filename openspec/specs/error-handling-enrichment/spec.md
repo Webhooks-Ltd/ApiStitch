@@ -49,31 +49,15 @@ The system SHALL add a `public ProblemDetails? Problem { get; }` property to the
 
 ### Requirement: Attempt ProblemDetails deserialization in EnsureSuccessAsync
 
-The system SHALL attempt to deserialize the error response body as `ProblemDetails` in `EnsureSuccessAsync` when the response `Content-Type` is `application/problem+json` or `application/json`. The deserialization SHALL use the generated `JsonSerializerOptions` (`_jsonOptions`). `EnsureSuccessAsync` SHALL change from `private static` to `private` (instance method) to access `_jsonOptions`.
+The system SHALL attempt ProblemDetails deserialization only when ProblemDetails support is signaled by the specification.
 
-#### Scenario: application/problem+json triggers ProblemDetails deserialization
-- **WHEN** a non-2xx response has `Content-Type: application/problem+json` and body `{"type":"about:blank","title":"Not Found","status":404,"detail":"Pet 123 not found"}`
-- **THEN** the thrown `ApiException.Problem` is not null
-- **THEN** `Problem.Type` = `"about:blank"`, `Problem.Title` = `"Not Found"`, `Problem.Status` = `404`, `Problem.Detail` = `"Pet 123 not found"`
+#### Scenario: No signal means no ProblemDetails deserialization path
+- **WHEN** a specification has no ProblemDetails support signal
+- **THEN** generated `EnsureSuccessAsync` does not include ProblemDetails deserialization logic
 
-#### Scenario: application/json triggers ProblemDetails deserialization
-- **WHEN** a non-2xx response has `Content-Type: application/json` and body `{"title":"Bad Request","status":400,"detail":"Invalid input"}`
-- **THEN** the thrown `ApiException.Problem` is not null
-- **THEN** `Problem.Title` = `"Bad Request"`, `Problem.Status` = `400`
-
-#### Scenario: text/html does not trigger ProblemDetails deserialization
-- **WHEN** a non-2xx response has `Content-Type: text/html` and body `<html>...</html>`
-- **THEN** the thrown `ApiException.Problem` is null
-- **THEN** `ApiException.ResponseBody` contains the HTML body
-
-#### Scenario: EnsureSuccessAsync is instance method
-- **WHEN** `EnsureSuccessAsync` is emitted in a client implementation
-- **THEN** the method signature is `private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)` (not `private static`)
-
-#### Scenario: Body truncation still applies
-- **WHEN** a non-2xx response has a body exceeding 8192 characters
-- **THEN** `ApiException.ResponseBody` contains only the first 8192 characters
-- **THEN** ProblemDetails deserialization is attempted on the truncated body
+#### Scenario: Signal enables ProblemDetails deserialization path
+- **WHEN** a specification signals ProblemDetails support
+- **THEN** generated `EnsureSuccessAsync` includes ProblemDetails deserialization behavior for qualifying JSON error responses
 
 ### Requirement: Fall back gracefully on deserialization failure
 

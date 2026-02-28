@@ -60,10 +60,11 @@ Banned:
 
 ## Documentation Definition of Done
 
-- For any user-visible behavior/configuration/CLI change, update both `README.md` and `CHANGELOG.md` in the same change.
+- Update `CHANGELOG.md` for all user-visible behavior/configuration/CLI changes.
+- Update `README.md` only when usage, configuration, installation, or end-user workflow guidance changes.
 - In OpenSpec task creation, include explicit checklist items for:
-  - updating `README.md` for new/changed behavior, options, or examples, and
-  - adding an `Unreleased` entry to `CHANGELOG.md`.
+  - adding an `Unreleased` entry to `CHANGELOG.md`, and
+  - updating `README.md` only when user guidance/configuration needs to change.
 - If docs are intentionally not updated, state why in the change artifacts/tasks.
 
 ## Operational Safety

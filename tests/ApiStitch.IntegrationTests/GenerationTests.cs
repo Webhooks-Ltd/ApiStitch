@@ -251,7 +251,7 @@ public class GenerationTests
         var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
         Assert.Contains("SampleApi.Models.Pet", contextFile.Content);
         Assert.Contains("SampleApi.Models.PetStatus", contextFile.Content);
-        Assert.Contains("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
+        Assert.DoesNotContain("Microsoft.AspNetCore.Mvc.ProblemDetails", contextFile.Content);
         Assert.DoesNotContain("Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument", contextFile.Content);
         Assert.Contains("CreatePetRequest", contextFile.Content);
 
@@ -529,7 +529,7 @@ public class GenerationTests
         Assert.True(success, FormatDiagnostics(compileDiags));
 
         Assert.Contains(result.Files, f => f.RelativePath == "FileResponse.cs");
-        Assert.Contains(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "ProblemDetails.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "ApiException.cs");
     }
 
@@ -590,12 +590,34 @@ public class GenerationTests
     }
 
     [Fact]
-    public void AdvancedHttp_ProblemDetailsInEnsureSuccess()
+    public void AdvancedHttp_NoProblemDetailsDeserializationWithoutSignal()
     {
         var result = Generate("advanced-http.yaml");
         var anyImpl = result.Files.FirstOrDefault(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I") && !f.RelativePath.Contains("Options") && !f.RelativePath.Contains("Extensions") && !f.RelativePath.Contains("Json"));
         Assert.NotNull(anyImpl);
-        Assert.Contains("Deserialize<ProblemDetails>", anyImpl.Content);
+        Assert.DoesNotContain("Deserialize<ProblemDetails>", anyImpl.Content);
+    }
+
+    [Fact]
+    public void Petstore_NoProblemDetailsSignal_DoesNotEmitProblemDetailsSupport()
+    {
+        var result = Generate("petstore.yaml");
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+
+        var exceptionFile = result.Files.First(f => f.RelativePath == "ApiException.cs");
+        Assert.DoesNotContain("ProblemDetails?", exceptionFile.Content);
+
+        var anyImpl = result.Files.First(f => f.RelativePath.Contains("Client.cs")
+            && !f.RelativePath.StartsWith("I")
+            && !f.RelativePath.Contains("Options")
+            && !f.RelativePath.Contains("Extensions")
+            && !f.RelativePath.Contains("Json"));
+        Assert.DoesNotContain("Deserialize<ProblemDetails>", anyImpl.Content);
+
+        var contextFile = result.Files.First(f => f.RelativePath.Contains("JsonContext"));
+        Assert.DoesNotContain("ProblemDetails", contextFile.Content);
     }
 
     [Fact]

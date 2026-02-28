@@ -26,6 +26,7 @@ context: |
 
   ## Definition of Done for User-Visible Changes
 
-  - For behavior/configuration/CLI changes, update `README.md` and `CHANGELOG.md` in the same change.
-  - In tasks.md, include explicit checklist items for README updates and a CHANGELOG `Unreleased` entry.
+  - For behavior/configuration/CLI changes, always update `CHANGELOG.md`.
+  - Update `README.md` only when usage, configuration, installation, or end-user workflow guidance changes.
+  - In tasks.md, include explicit checklist items for a CHANGELOG `Unreleased` entry and README updates only when user guidance/configuration changes.
   - If docs are intentionally not updated, state why in artifacts/tasks.

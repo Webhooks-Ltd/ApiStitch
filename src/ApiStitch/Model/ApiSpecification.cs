@@ -19,6 +19,9 @@ public record class ApiSpecification
 
     /// <summary>Metadata extracted from the spec's info section.</summary>
     public ApiSpecificationMetadata? Metadata { get; init; }
+
+    /// <summary>Whether any operation signals ProblemDetails support via non-success response contracts.</summary>
+    public bool HasProblemDetailsSupport { get; init; }
 }
 
 /// <summary>

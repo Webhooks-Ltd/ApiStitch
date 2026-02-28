@@ -216,7 +216,9 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             return;
 
         string? body = null;
+{{~ if has_problem_details ~}}
         {{ problem_details_type }}? problem = null;
+{{~ end ~}}
 
         if (response.Content.Headers.ContentLength is not 0)
         {
@@ -226,6 +228,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             var read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             body = new string(buffer, 0, read);
 
+{{~ if has_problem_details ~}}
             var contentType = response.Content.Headers.ContentType?.MediaType;
             if (contentType is "application/problem+json" or "application/json")
             {
@@ -237,8 +240,13 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
                 {
                 }
             }
+{{~ end ~}}
         }
 
+{{~ if has_problem_details ~}}
         throw new ApiException(response.StatusCode, body, response.Headers, problem);
+{{~ else ~}}
+        throw new ApiException(response.StatusCode, body, response.Headers);
+{{~ end ~}}
     }
 }

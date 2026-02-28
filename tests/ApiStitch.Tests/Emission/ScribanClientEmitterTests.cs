@@ -15,13 +15,15 @@ public class ScribanClientEmitterTests
     private static ApiSpecification CreateSpec(
         string clientName,
         IReadOnlyList<ApiOperation> operations,
-        IReadOnlyList<ApiSchema>? schemas = null)
+        IReadOnlyList<ApiSchema>? schemas = null,
+        bool hasProblemDetailsSupport = false)
     {
         return new ApiSpecification
         {
             Schemas = schemas ?? [],
             Operations = operations,
             ClientName = clientName,
+            HasProblemDetailsSupport = hasProblemDetailsSupport,
         };
     }
 
@@ -94,6 +96,36 @@ public class ScribanClientEmitterTests
 
         Assert.Contains(result.Files, f => f.RelativePath == "IPetStoreApiClient.cs");
         Assert.Contains(result.Files, f => f.RelativePath == "PetStoreApiClient.cs");
+    }
+
+    [Fact]
+    public void FileNaming_LowercaseTag_IsNormalizedToPascalCase()
+    {
+        var petSchema = CreateSchema("Pet");
+        var op = new ApiOperation
+        {
+            OperationId = "listPets",
+            Path = "pets",
+            HttpMethod = ApiHttpMethod.Get,
+            Tag = "pet",
+            CSharpMethodName = "ListPetsAsync",
+            SuccessResponse = new ApiResponse
+            {
+                StatusCode = 200,
+                ContentKind = ContentKind.Json,
+                MediaType = "application/json",
+                Schema = petSchema,
+            },
+        };
+
+        var spec = CreateSpec("PetStore", [op]);
+        var emitter = new ScribanClientEmitter();
+        var result = emitter.Emit(spec, DefaultConfig);
+
+        Assert.Contains(result.Files, f => f.RelativePath == "IPetStorePetClient.cs");
+        Assert.Contains(result.Files, f => f.RelativePath == "PetStorePetClient.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "IPetStorepetClient.cs");
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "PetStorepetClient.cs");
     }
 
     [Fact]
@@ -580,7 +612,7 @@ public class ScribanClientEmitterTests
             OperationId = "getPet", Path = "pets", HttpMethod = ApiHttpMethod.Get, Tag = "Pets", CSharpMethodName = "GetPetAsync",
             SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = petSchema },
         };
-        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op]), DefaultConfig);
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op], hasProblemDetailsSupport: true), DefaultConfig);
         Assert.Contains(result.Files, f => f.RelativePath == "ProblemDetails.cs");
         var problemFile = result.Files.First(f => f.RelativePath == "ProblemDetails.cs");
         Assert.Contains("public sealed record ProblemDetails", problemFile.Content);
@@ -588,6 +620,23 @@ public class ScribanClientEmitterTests
         var impl = result.Files.First(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I"));
         Assert.Contains("Deserialize<ProblemDetails>", impl.Content);
         Assert.Contains("application/problem+json", impl.Content);
+    }
+
+    [Fact]
+    public void ProblemDetails_NotEmittedWithoutSignal()
+    {
+        var petSchema = CreateSchema("Pet");
+        var op = new ApiOperation
+        {
+            OperationId = "getPet", Path = "pets", HttpMethod = ApiHttpMethod.Get, Tag = "Pets", CSharpMethodName = "GetPetAsync",
+            SuccessResponse = new ApiResponse { StatusCode = 200, ContentKind = ContentKind.Json, MediaType = "application/json", Schema = petSchema },
+        };
+        var result = new ScribanClientEmitter().Emit(CreateSpec("TestApi", [op], hasProblemDetailsSupport: false), DefaultConfig);
+        Assert.DoesNotContain(result.Files, f => f.RelativePath == "ProblemDetails.cs");
+        var impl = result.Files.First(f => f.RelativePath.Contains("Client.cs") && !f.RelativePath.StartsWith("I"));
+        Assert.DoesNotContain("Deserialize<ProblemDetails>", impl.Content);
+        var exceptionFile = result.Files.First(f => f.RelativePath == "ApiException.cs");
+        Assert.DoesNotContain("ProblemDetails? Problem", exceptionFile.Content);
     }
 
     [Fact]

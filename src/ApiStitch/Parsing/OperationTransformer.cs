@@ -129,6 +129,8 @@ public class OperationTransformer
         if (responseSkip)
             return [];
 
+        var hasProblemDetailsSupport = HasProblemDetailsSupportSignal(operation.Responses);
+
         var tags = operation.Tags?.Select(t => t.Name).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToList()
                    ?? new List<string>();
 
@@ -148,6 +150,7 @@ public class OperationTransformer
                 Parameters = parameters,
                 RequestBody = requestBody,
                 SuccessResponse = successResponse,
+                HasProblemDetailsSupport = hasProblemDetailsSupport,
                 IsDeprecated = operation.Deprecated,
                 Description = operation.Description,
             });
@@ -962,6 +965,61 @@ public class OperationTransformer
         return null;
     }
 
+    private bool HasProblemDetailsSupportSignal(OpenApiResponses? responses)
+    {
+        if (responses is null || responses.Count == 0)
+            return false;
+
+        foreach (var (statusCode, response) in responses)
+        {
+            if (!IsNonSuccessResponse(statusCode))
+                continue;
+
+            if (response.Content is null)
+                continue;
+
+            foreach (var (mediaType, mediaTypeObject) in response.Content)
+            {
+                if (string.Equals(mediaType, "application/problem+json", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (IsProblemDetailsSchema(mediaTypeObject.Schema))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsProblemDetailsSchema(IOpenApiSchema? schema)
+    {
+        if (schema is null)
+            return false;
+
+        var resolved = ResolveRef(schema);
+        if (!_schemaMap.TryGetValue(resolved, out var mapped))
+            return false;
+
+        if (string.Equals(mapped.Name, "ProblemDetails", StringComparison.Ordinal))
+            return true;
+
+        if (string.Equals(mapped.OriginalName, "ProblemDetails", StringComparison.Ordinal))
+            return true;
+
+        if (mapped.ExternalClrTypeName?.EndsWith(".ProblemDetails", StringComparison.Ordinal) == true)
+            return true;
+
+        return false;
+    }
+
+    private static bool IsNonSuccessResponse(string statusCode)
+    {
+        if (string.Equals(statusCode, "default", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return int.TryParse(statusCode, out var code) && (code < 200 || code >= 300);
+    }
+
     private void DeduplicateMethodNames(List<ApiOperation> operations)
     {
         var byTag = operations.GroupBy(o => o.Tag, StringComparer.Ordinal);
@@ -993,6 +1051,7 @@ public class OperationTransformer
                         Parameters = op.Parameters,
                         RequestBody = op.RequestBody,
                         SuccessResponse = op.SuccessResponse,
+                        HasProblemDetailsSupport = op.HasProblemDetailsSupport,
                         IsDeprecated = op.IsDeprecated,
                         Description = op.Description,
                     };
