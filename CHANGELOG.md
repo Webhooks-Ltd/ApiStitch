@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.0-alpha.4 — 2026-02-28
+
 ### Added
 
 - `spec` now accepts full HTTP(S) URLs in both CLI (`--spec`) and `openapi-stitch.yaml`, so generation can run directly from remote OpenAPI documents without pre-downloading files
