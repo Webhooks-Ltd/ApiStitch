@@ -64,6 +64,14 @@ namespace: MyClient.Generated
 clientName: MyApi
 ```
 
+`spec` can also be a full HTTP(S) URL, for example:
+
+```yaml
+spec: https://petstore3.swagger.io/api/v3/openapi.json
+namespace: MyClient.Generated
+clientName: MyApi
+```
+
 ### 3. Use the generated client
 
 ```csharp
@@ -83,7 +91,7 @@ All options in `openapi-stitch.yaml`:
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `spec` | Path to OpenAPI spec file (mutually exclusive with `project`) | |
+| `spec` | Path or HTTP(S) URL to OpenAPI spec (mutually exclusive with `project`) | |
 | `project` | Path to `.csproj` that produces an OpenAPI spec at build time | |
 | `namespace` | C# namespace for generated types | `ApiStitch.Generated` |
 | `outputDir` | Output directory for generated files | `./Generated` |
@@ -96,6 +104,8 @@ All options in `openapi-stitch.yaml`:
 | `typeReuse.namespaceMap` | Namespace remapping (e.g., `ProducerNs: ConsumerNs`) | `{}` |
 
 CLI flags (`--spec`, `--output`, `--namespace`, `--client-name`, `--output-style`) override the corresponding YAML values.
+
+For remote `spec` URLs, ApiStitch applies a bounded fetch policy (30s timeout, 10 MiB response limit, max 5 redirects) and reports fetch/URL errors via diagnostics.
 
 ## Sample
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `spec` now accepts full HTTP(S) URLs in both CLI (`--spec`) and `openapi-stitch.yaml`, so generation can run directly from remote OpenAPI documents without pre-downloading files
+
+### Changed
+
+- Remote spec loading now enforces bounded fetch behavior (30s timeout, 10 MiB payload limit, max 5 redirects) and emits deterministic diagnostics for unsupported URI schemes, HTTP failures, timeout, oversize payloads, and redirect issues
+
 ### Fixed
 
 - ProblemDetails and ValidationProblemDetails now respect type reuse — when the schema has `x-apistitch-type` and matches include config, no local type is generated and the FQN is used in ApiException and client error handling
