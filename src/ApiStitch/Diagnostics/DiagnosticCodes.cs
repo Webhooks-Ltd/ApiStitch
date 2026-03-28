@@ -34,6 +34,9 @@ public static class DiagnosticCodes
     /// <summary>Info: multiple content types available, one selected over others.</summary>
     public const string ContentTypeNegotiated = "AS409";
 
+    /// <summary>Info: missing path parameter synthesized from a placeholder in the path template.</summary>
+    public const string SynthesizedPathParameter = "AS410";
+
     /// <summary>Info: type reused from external assembly (not generated).</summary>
     public const string TypeReused = "AS500";
 

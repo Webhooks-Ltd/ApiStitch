@@ -2,7 +2,6 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
-using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -57,7 +56,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
 {{~ else ~}}
         if ({{ param.param_name }} is not null)
         {
-            foreach (var item in {{ param.param_name }})
+            foreach (var {{ param.item_name }} in {{ param.param_name }})
             {
                 queryParams.Add(new KeyValuePair<string, string?>("{{ param.wire_name }}", {{ param.to_string_expr }}));
             }
@@ -107,10 +106,10 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
         var formFields = new List<KeyValuePair<string, string?>>();
 {{~ for field in op.form_fields ~}}
 {{~ if field.is_required ~}}
-        formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.param_name }}));
+        formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.string_value_expr }}));
 {{~ else ~}}
         if ({{ field.param_name }} is not null)
-            formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.param_name }}));
+            formFields.Add(new KeyValuePair<string, string?>("{{ field.wire_name }}", {{ field.string_value_expr }}));
 {{~ end ~}}
 {{~ end ~}}
         request.Content = new FormUrlEncodedContent(formFields);
@@ -180,7 +179,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
             && !mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase))
         {
             using var errorStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var errorReader = new StreamReader(errorStream);
+            using var errorReader = new System.IO.StreamReader(errorStream);
             var errorBuffer = new char[8192];
             var errorRead = await errorReader.ReadAsync(errorBuffer, cancellationToken).ConfigureAwait(false);
             var errorBody = new string(errorBuffer, 0, errorRead);
@@ -275,7 +274,7 @@ internal sealed partial class {{ class_name }} : {{ interface_name }}
         if (response.Content.Headers.ContentLength is not 0)
         {
             using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var reader = new StreamReader(stream);
+            using var reader = new System.IO.StreamReader(stream);
             var buffer = new char[8192];
             var read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             body = new string(buffer, 0, read);

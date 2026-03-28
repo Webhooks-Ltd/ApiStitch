@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using ApiStitch.Configuration;
 using ApiStitch.Diagnostics;
 using ApiStitch.Model;
@@ -11,6 +12,8 @@ namespace ApiStitch.Parsing;
 /// </summary>
 public class OperationTransformer
 {
+    private static readonly Regex PathPlaceholderRegex = new(@"\{([^{}]+)\}", RegexOptions.Compiled);
+
     private readonly IReadOnlyDictionary<IOpenApiSchema, ApiSchema> _schemaMap;
     private readonly ApiStitchConfig _config;
     private readonly List<Diagnostic> _diagnostics = [];
@@ -123,6 +126,7 @@ public class OperationTransformer
         var (parameters, paramDiags) = TransformParameters(mergedParameters, specPath);
         if (paramDiags != null)
             _diagnostics.AddRange(paramDiags);
+        EnsureAllPathPlaceholdersHaveParameters(path, parameters);
 
         var (requestBody, bodySkip) = TransformRequestBody(operation.RequestBody, specPath);
         if (bodySkip)
@@ -213,12 +217,13 @@ public class OperationTransformer
         };
     }
 
-    private (IReadOnlyList<ApiParameter> Parameters, List<Diagnostic>? Diagnostics) TransformParameters(
+    private (List<ApiParameter> Parameters, List<Diagnostic>? Diagnostics) TransformParameters(
         IReadOnlyList<IOpenApiParameter> parameters,
         string specPath)
     {
         var result = new List<ApiParameter>();
         var diagnostics = new List<Diagnostic>();
+        var usedParameterNames = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var param in parameters)
         {
@@ -274,11 +279,14 @@ public class OperationTransformer
                 continue;
 
             var isRequired = location == Model.ParameterLocation.Path || param.Required;
+            var parameterName = NamingHelper.ResolveCollision(
+                ToCamelCase(NamingHelper.ToPascalCase(param.Name ?? "")),
+                usedParameterNames);
 
             result.Add(new ApiParameter
             {
                 Name = param.Name ?? "",
-                CSharpName = ToCamelCase(NamingHelper.ToPascalCase(param.Name ?? "")),
+                CSharpName = parameterName,
                 Location = location.Value,
                 Schema = schema,
                 IsRequired = isRequired,
@@ -289,6 +297,51 @@ public class OperationTransformer
         }
 
         return (result, diagnostics.Count > 0 ? diagnostics : null);
+    }
+
+    private void EnsureAllPathPlaceholdersHaveParameters(string path, List<ApiParameter> parameters)
+    {
+        var knownNames = parameters
+            .Select(parameter => parameter.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var usedParameterNames = parameters
+            .Select(parameter => parameter.CSharpName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (Match match in PathPlaceholderRegex.Matches(path))
+        {
+            var placeholderName = match.Groups[1].Value;
+            if (!knownNames.Add(placeholderName))
+                continue;
+
+            _diagnostics.Add(new Diagnostic(
+                DiagnosticSeverity.Info,
+                DiagnosticCodes.SynthesizedPathParameter,
+                $"Path placeholder '{placeholderName}' had no declared parameter. Synthesized a required string path parameter.",
+                $"#/paths/{path}"));
+
+            parameters.Add(new ApiParameter
+            {
+                Name = placeholderName,
+                CSharpName = NamingHelper.ResolveCollision(
+                    ToCamelCase(NamingHelper.ToPascalCase(placeholderName)),
+                    usedParameterNames),
+                Location = Model.ParameterLocation.Path,
+                Schema = new ApiSchema
+                {
+                    Name = NamingHelper.ToPascalCase(placeholderName),
+                    OriginalName = placeholderName,
+                    Kind = SchemaKind.Primitive,
+                    PrimitiveType = PrimitiveType.String,
+                    IsNullable = false,
+                    CSharpTypeName = "string",
+                    Source = $"#/paths/{path}",
+                },
+                IsRequired = true,
+                Style = Model.ParameterStyle.Simple,
+                Explode = false,
+            });
+        }
     }
 
     private ApiSchema? ResolveParameterSchema(IOpenApiSchema? schema, string paramName, string specPath, bool allowInlineObject = false)
@@ -628,6 +681,10 @@ public class OperationTransformer
     {
         var requiredSet = resolved.Required;
         var properties = new List<ApiProperty>();
+        var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            name,
+        };
 
         if (resolved.Properties is null)
             return new ApiSchema
@@ -721,7 +778,7 @@ public class OperationTransformer
             properties.Add(new ApiProperty
             {
                 Name = propName,
-                CSharpName = NamingHelper.ToPascalCase(propName),
+                CSharpName = NamingHelper.ResolveCollision(NamingHelper.ToPascalCase(propName), usedPropertyNames),
                 Schema = propApiSchema,
                 IsRequired = requiredSet?.Contains(propName) == true,
             });
@@ -1041,6 +1098,10 @@ public class OperationTransformer
         var schemaName = CreateSyntheticResponseSchemaName(methodName, statusCode);
         var requiredSet = resolved.Required;
         var properties = new List<ApiProperty>();
+        var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            schemaName,
+        };
 
         if (resolved.Properties is not null)
         {
@@ -1053,7 +1114,7 @@ public class OperationTransformer
                 properties.Add(new ApiProperty
                 {
                     Name = propName,
-                    CSharpName = NamingHelper.ToPascalCase(propName),
+                    CSharpName = NamingHelper.ResolveCollision(NamingHelper.ToPascalCase(propName), usedPropertyNames),
                     Schema = memberResult.Schema!,
                     IsRequired = requiredSet?.Contains(propName) == true,
                 });

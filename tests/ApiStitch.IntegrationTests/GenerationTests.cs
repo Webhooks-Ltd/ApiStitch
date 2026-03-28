@@ -745,5 +745,5 @@ public class GenerationTests
     }
 
     private static string FormatDiagnostics(IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> diagnostics) =>
-        $"Compilation failed:\n{string.Join("\n", diagnostics.Select(d => $"  {d.Location}: {d.GetMessage()}"))}";
+        CompilationDiagnosticsFormatter.Format(diagnostics);
 }

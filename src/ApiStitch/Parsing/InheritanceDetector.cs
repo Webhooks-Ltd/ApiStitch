@@ -22,13 +22,29 @@ public static class InheritanceDetector
             {
                 derived.BaseSchema = baseSchema;
 
-                var basePropertyNames = new HashSet<string>(
-                    baseSchema.Properties.Select(p => p.Name), StringComparer.Ordinal);
+                var basePropertyNames = GetInheritedPropertyNames(baseSchema);
 
                 derived.Properties = derived.Properties
                     .Where(p => !basePropertyNames.Contains(p.Name))
                     .ToList();
             }
         }
+    }
+
+    private static HashSet<string> GetInheritedPropertyNames(ApiSchema schema)
+    {
+        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<ApiSchema>(ReferenceEqualityComparer.Instance);
+        ApiSchema? current = schema;
+
+        while (current is not null && visited.Add(current))
+        {
+            foreach (var property in current.Properties)
+                propertyNames.Add(property.Name);
+
+            current = current.BaseSchema;
+        }
+
+        return propertyNames;
     }
 }

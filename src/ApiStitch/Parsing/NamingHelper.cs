@@ -14,7 +14,7 @@ internal static class NamingHelper
 
         foreach (var c in input)
         {
-            if (c is '_' or '-' or '.' or ' ')
+            if (!char.IsLetterOrDigit(c))
             {
                 capitalizeNext = true;
                 continue;
@@ -31,8 +31,8 @@ internal static class NamingHelper
             }
         }
 
-        if (sb.Length > 0 && char.IsLower(sb[0]))
-            sb[0] = char.ToUpperInvariant(sb[0]);
+        if (sb.Length > 0 && char.IsDigit(sb[0]))
+            sb.Insert(0, "Value");
 
         return sb.ToString();
     }

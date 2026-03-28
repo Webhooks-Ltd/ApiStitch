@@ -256,6 +256,33 @@ public class OperationTransformerTests
         Assert.True(pathParam.IsRequired);
     }
 
+    [Fact]
+    public void MissingPathParameter_IsSynthesizedWithDiagnostic()
+    {
+        var (ops, _, diags) = TransformOperations("""
+            openapi: 3.0.3
+            info: { title: Test, version: 1.0.0 }
+            paths:
+              /pets/{petId}:
+                get:
+                  operationId: getPet
+                  tags: [Pets]
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              schemas: {}
+            """);
+
+        var op = Assert.Single(ops);
+        var pathParam = Assert.Single(op.Parameters);
+        Assert.Equal("petId", pathParam.Name);
+        Assert.Equal(ParameterLocation.Path, pathParam.Location);
+        Assert.True(pathParam.IsRequired);
+        Assert.Equal(PrimitiveType.String, pathParam.Schema.PrimitiveType);
+        Assert.Contains(diags, d => d.Code == DiagnosticCodes.SynthesizedPathParameter);
+    }
+
     // ──────────────────────────────────────────────
     // 6.3 Schema resolution
     // ──────────────────────────────────────────────

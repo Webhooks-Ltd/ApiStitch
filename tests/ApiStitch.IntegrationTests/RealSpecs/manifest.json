@@ -1,0 +1,74 @@
+{
+  "entries": [
+    {
+      "id": "digitalocean",
+      "displayName": "DigitalOcean public API",
+      "fixturePath": "Fixtures/digitalocean.yaml",
+      "sourceName": "DigitalOcean public API",
+      "sourceUrl": "https://github.com/digitalocean/openapi",
+      "pinnedRevision": "Snapshot downloaded on 2026-03-28 from the public DigitalOcean OpenAPI source.",
+      "expectedOutcome": "ExpectedDiagnosticFailure",
+      "expectedDiagnosticCodes": [
+        "AS100"
+      ],
+      "expectedMessageFragments": [
+        "$ref is not a valid property",
+        "Responses must contain at least one response"
+      ],
+      "cliTimeoutMs": 120000,
+      "isStress": false
+    },
+    {
+      "id": "github-rest",
+      "displayName": "GitHub REST API description",
+      "fixturePath": "Fixtures/github-rest.yaml",
+      "sourceName": "GitHub REST API description",
+      "sourceUrl": "https://github.com/github/rest-api-description",
+      "pinnedRevision": "Snapshot downloaded on 2026-03-28 from the public GitHub REST API description source.",
+      "expectedOutcome": "ExpectedDiagnosticFailure",
+      "expectedDiagnosticCodes": [
+        "AS100"
+      ],
+      "expectedMessageFragments": [
+        "MUST be unique"
+      ],
+      "cliTimeoutMs": 120000,
+      "isStress": false
+    },
+    {
+      "id": "msgraph-v1",
+      "displayName": "Microsoft Graph v1.0 metadata",
+      "fixturePath": "Fixtures/msgraph-v1.yaml",
+      "sourceName": "Microsoft Graph v1.0 metadata",
+      "sourceUrl": "https://github.com/microsoftgraph/msgraph-metadata",
+      "pinnedRevision": "Snapshot downloaded on 2026-03-28 from the public Microsoft Graph metadata source.",
+      "expectedOutcome": "SuccessWithWarnings",
+      "expectedDiagnosticCodes": [
+        "AS201",
+        "AS204",
+        "AS205",
+        "AS401"
+      ],
+      "expectedMessageFragments": [],
+      "cliTimeoutMs": 420000,
+      "isStress": false
+    },
+    {
+      "id": "stripe",
+      "displayName": "Stripe OpenAPI",
+      "fixturePath": "Fixtures/stripe.yaml",
+      "sourceName": "Stripe OpenAPI",
+      "sourceUrl": "https://github.com/stripe/openapi",
+      "pinnedRevision": "Snapshot downloaded on 2026-03-28 from the public Stripe OpenAPI source.",
+      "expectedOutcome": "SuccessWithWarnings",
+      "expectedDiagnosticCodes": [
+        "AS200",
+        "AS204",
+        "AS401"
+      ],
+      "expectedMessageFragments": [],
+      "cliTimeoutMs": 240000,
+      "isStress": false
+    }
+  ]
+}

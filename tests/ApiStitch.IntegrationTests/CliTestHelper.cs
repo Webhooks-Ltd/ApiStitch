@@ -41,7 +41,16 @@ internal static class CliTestHelper
         var stderrTask = process.StandardError.ReadToEndAsync();
 
         using var cts = new CancellationTokenSource(timeoutMs);
-        await process.WaitForExitAsync(cts.Token);
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw new TimeoutException($"CLI process timed out after {timeoutMs} ms.");
+        }
 
         return new CliResult(process.ExitCode, await stdoutTask, await stderrTask);
     }

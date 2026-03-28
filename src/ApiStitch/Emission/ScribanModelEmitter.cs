@@ -66,6 +66,7 @@ public class ScribanModelEmitter : IModelEmitter
     private GeneratedFile EmitRecord(ApiSchema schema, ApiSpecification spec, ApiStitchConfig config, List<Diagnostic> diagnostics)
     {
         var modelsNamespace = BuildNamespace(config.Namespace, config.OutputStyle, "Models");
+        var hasDerivedTypes = spec.Schemas.Any(candidate => ReferenceEquals(candidate.BaseSchema, schema));
         var hasCollections = schema.Properties.Any(p =>
             p.Schema.Kind == SchemaKind.Array ||
             (p.Schema.CSharpTypeName?.StartsWith("IReadOnlyList<", StringComparison.Ordinal) ?? false));
@@ -94,7 +95,7 @@ public class ScribanModelEmitter : IModelEmitter
         model.Add("namespace", modelsNamespace);
         model.Add("name", schema.Name);
         model.Add("base_name", schema.BaseSchema?.CSharpTypeName);
-        model.Add("is_sealed", schema.BaseSchema != null);
+        model.Add("is_sealed", schema.BaseSchema is not null && !hasDerivedTypes);
         model.Add("is_deprecated", schema.IsDeprecated);
         model.Add("has_additional_properties", schema.HasAdditionalProperties);
         model.Add("additional_properties_comment", hasTypedAdditionalProperties
@@ -103,7 +104,7 @@ public class ScribanModelEmitter : IModelEmitter
         model.Add("has_collections", hasCollections);
         model.Add("properties", properties);
 
-        var context = new TemplateContext();
+        var context = CreateTemplateContext();
         context.PushGlobal(model);
 
         var content = _recordTemplate.Render(context).TrimEnd() + "\n";
@@ -125,7 +126,7 @@ public class ScribanModelEmitter : IModelEmitter
         model.Add("is_deprecated", schema.IsDeprecated);
         model.Add("members", members);
 
-        var context = new TemplateContext();
+        var context = CreateTemplateContext();
         context.PushGlobal(model);
 
         var content = _enumTemplate.Render(context).TrimEnd() + "\n";
@@ -163,7 +164,7 @@ public class ScribanModelEmitter : IModelEmitter
         model.Add("collection_types", jsonSerializableCollections);
         model.Add("has_collections", jsonSerializableCollections.Count > 0);
 
-        var context = new TemplateContext();
+        var context = CreateTemplateContext();
         context.PushGlobal(model);
 
         var content = _contextTemplate.Render(context).TrimEnd() + "\n";
@@ -227,6 +228,15 @@ public class ScribanModelEmitter : IModelEmitter
             return true;
 
         return schema.ExternalClrTypeName?.EndsWith(".ProblemDetails", StringComparison.Ordinal) == true;
+    }
+
+    private static TemplateContext CreateTemplateContext()
+    {
+        return new TemplateContext
+        {
+            LoopLimit = 100_000,
+            LimitToString = 0,
+        };
     }
 
     private static Template LoadTemplate(string name)

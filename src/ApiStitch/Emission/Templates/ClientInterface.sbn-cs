@@ -2,11 +2,13 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 {{~ if models_namespace != namespace ~}}
 using {{ models_namespace }};
+{{~ end ~}}
+{{~ if infrastructure_namespace != namespace ~}}
+using {{ infrastructure_namespace }};
 {{~ end ~}}
 
 namespace {{ namespace }};

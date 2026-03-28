@@ -15,6 +15,110 @@ namespace ApiStitch.Emission;
 /// </summary>
 public class ScribanClientEmitter : IClientEmitter
 {
+    private sealed class TagClientModel
+    {
+        public required string interface_name { get; init; }
+        public required string class_name { get; init; }
+        public required string interface_type { get; init; }
+        public required string class_type { get; init; }
+    }
+
+    private sealed class ParameterModel
+    {
+        public required string type_name { get; init; }
+        public required string param_name { get; init; }
+        public required bool is_required { get; init; }
+        public string? default_value { get; init; }
+        public string? string_value_expr { get; init; }
+    }
+
+    private sealed class DeepObjectPropertyModel
+    {
+        public required string wire_name { get; init; }
+        public required string csharp_name { get; init; }
+    }
+
+    private sealed class QueryParameterModel
+    {
+        public required string wire_name { get; init; }
+        public required string param_name { get; init; }
+        public required string item_name { get; init; }
+        public required bool is_required { get; init; }
+        public required bool is_array { get; init; }
+        public required string to_string_expr { get; init; }
+        public required string style { get; init; }
+        public required bool explode { get; init; }
+        public required bool is_deep_object { get; init; }
+        public required bool is_flattened { get; init; }
+        public List<DeepObjectPropertyModel>? deep_object_props { get; init; }
+    }
+
+    private sealed class HeaderParameterModel
+    {
+        public required string wire_name { get; init; }
+        public required string param_name { get; init; }
+        public required bool is_required { get; init; }
+        public required string to_string_expr { get; init; }
+    }
+
+    private sealed class FormFieldModel
+    {
+        public required string wire_name { get; init; }
+        public required string param_name { get; init; }
+        public required bool is_required { get; init; }
+        public required string string_value_expr { get; init; }
+    }
+
+    private sealed class MultipartPartModel
+    {
+        public required string wire_name { get; init; }
+        public required string param_name { get; init; }
+        public required bool is_binary { get; init; }
+        public required bool has_json_encoding { get; init; }
+        public required bool use_json_options { get; init; }
+        public string? file_name_param_name { get; init; }
+        public required bool is_required { get; init; }
+    }
+
+    private sealed class BodyModel
+    {
+        public string? content_kind { get; init; }
+        public string? param_name { get; init; }
+        public bool use_json_options { get; init; } = true;
+        public List<FormFieldModel>? form_fields { get; init; }
+        public List<MultipartPartModel>? multipart_parts { get; init; }
+    }
+
+    private sealed class ResponseModel
+    {
+        public string? content_kind { get; init; }
+        public bool use_json_options { get; init; } = true;
+    }
+
+    private sealed class OperationModel
+    {
+        public required string method_name { get; init; }
+        public required string return_type { get; init; }
+        public string? response_type { get; init; }
+        public required string http_method { get; init; }
+        public required string path_template { get; init; }
+        public required bool is_deprecated { get; init; }
+        public required bool has_body { get; init; }
+        public required bool has_response_body { get; init; }
+        public required bool has_query_params { get; init; }
+        public string? body_content_kind { get; init; }
+        public string? body_param_name { get; init; }
+        public required bool body_use_json_options { get; init; }
+        public List<FormFieldModel>? form_fields { get; init; }
+        public List<MultipartPartModel>? multipart_parts { get; init; }
+        public string? response_content_kind { get; init; }
+        public required bool response_use_json_options { get; init; }
+        public string? accept_header { get; init; }
+        public required List<ParameterModel> parameters { get; init; }
+        public required List<QueryParameterModel> query_params { get; init; }
+        public required List<HeaderParameterModel> header_params { get; init; }
+    }
+
     private readonly Template _interfaceTemplate;
     private readonly Template _implementationTemplate;
     private readonly Template _exceptionTemplate;
@@ -76,7 +180,7 @@ public class ScribanClientEmitter : IClientEmitter
             : "ProblemDetails";
 
         var queryEnums = new HashSet<string>(StringComparer.Ordinal);
-        var tagClients = new List<object>();
+        var tagClients = new List<TagClientModel>();
 
         foreach (var group in grouped)
         {
@@ -89,7 +193,7 @@ public class ScribanClientEmitter : IClientEmitter
             var operations = group.OrderBy(o => o.CSharpMethodName, StringComparer.Ordinal).ToList();
             var opModels = BuildOperationModels(operations, queryEnums);
 
-            files.Add(EmitInterface(contractsNamespace, modelsNamespace, interfaceName, opModels, outputStyle));
+            files.Add(EmitInterface(contractsNamespace, modelsNamespace, infrastructureNamespace, interfaceName, opModels, outputStyle));
             files.Add(EmitImplementation(
                 clientsNamespace,
                 contractsNamespace,
@@ -105,7 +209,7 @@ public class ScribanClientEmitter : IClientEmitter
                 opModels,
                 outputStyle));
 
-            tagClients.Add(new
+            tagClients.Add(new TagClientModel
             {
                 interface_name = interfaceName,
                 class_name = className,
@@ -137,15 +241,15 @@ public class ScribanClientEmitter : IClientEmitter
         return new EmissionResult(files, diagnostics);
     }
 
-    private List<object> BuildOperationModels(List<ApiOperation> operations, HashSet<string> queryEnums)
+    private List<OperationModel> BuildOperationModels(List<ApiOperation> operations, HashSet<string> queryEnums)
     {
-        var result = new List<object>();
+        var result = new List<OperationModel>();
 
         foreach (var op in operations)
         {
-            var allParams = new List<object>();
-            var queryParams = new List<object>();
-            var headerParams = new List<object>();
+            var allParams = new List<ParameterModel>();
+            var queryParams = new List<QueryParameterModel>();
+            var headerParams = new List<HeaderParameterModel>();
             var hasQueryParams = false;
             var hasBody = op.RequestBody is not null;
             var hasResponseBody = op.SuccessResponse?.HasBody == true;
@@ -173,7 +277,7 @@ public class ScribanClientEmitter : IClientEmitter
                     {
                         var propTypeName = GetTypeName(prop.Schema) + "?";
                         var propParamName = ToCamelCase(prop.CSharpName);
-                        allParams.Add(new
+                        allParams.Add(new ParameterModel
                         {
                             type_name = propTypeName,
                             param_name = propParamName,
@@ -203,7 +307,7 @@ public class ScribanClientEmitter : IClientEmitter
 
             var acceptHeader = op.SuccessResponse?.MediaType;
 
-            result.Add(new
+            result.Add(new OperationModel
             {
                 method_name = op.CSharpMethodName,
                 return_type = returnType,
@@ -222,7 +326,7 @@ public class ScribanClientEmitter : IClientEmitter
                 response_content_kind = responseModel.content_kind,
                 response_use_json_options = responseModel.use_json_options,
                 accept_header = acceptHeader,
-                parameters = allParams,
+                parameters = OrderParameters(allParams),
                 query_params = queryParams,
                 header_params = headerParams,
             });
@@ -231,23 +335,26 @@ public class ScribanClientEmitter : IClientEmitter
         return result;
     }
 
-    private (dynamic bodyModel, List<object> bodyParams) BuildRequestBodyModel(ApiRequestBody? requestBody)
+    private static List<ParameterModel> OrderParameters(List<ParameterModel> parameters)
     {
-        var empty = new
-        {
-            content_kind = (string?)null,
-            param_name = (string?)null,
-            use_json_options = true,
-            form_fields = (List<object>?)null,
-            multipart_parts = (List<object>?)null,
-        };
+        return parameters
+            .Select(static (parameter, index) => new { parameter, index })
+            .OrderByDescending(static item => item.parameter.is_required)
+            .ThenBy(static item => item.index)
+            .Select(static item => item.parameter)
+            .ToList();
+    }
+
+    private (BodyModel bodyModel, List<ParameterModel> bodyParams) BuildRequestBodyModel(ApiRequestBody? requestBody)
+    {
+        var empty = new BodyModel();
 
         if (requestBody is null)
             return (empty, []);
 
         // Template matches on lowercase enum name (e.g. "json", "formurlencoded")
         var contentKind = requestBody.ContentKind.ToString().ToLowerInvariant();
-        var bodyParams = new List<object>();
+        var bodyParams = new List<ParameterModel>();
 
         switch (requestBody.ContentKind)
         {
@@ -257,7 +364,7 @@ public class ScribanClientEmitter : IClientEmitter
                 if (!requestBody.IsRequired && !typeName.EndsWith("?", StringComparison.Ordinal))
                     typeName += "?";
                 var useJsonOptions = JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(requestBody.Schema);
-                bodyParams.Add(new
+                bodyParams.Add(new ParameterModel
                 {
                     type_name = typeName,
                     param_name = "body",
@@ -265,51 +372,50 @@ public class ScribanClientEmitter : IClientEmitter
                     default_value = requestBody.IsRequired ? (string?)null : "null",
                 });
 
-                return (new
+                return (new BodyModel
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
                     use_json_options = useJsonOptions,
-                    form_fields = (List<object>?)null,
-                    multipart_parts = (List<object>?)null,
                 }, bodyParams);
             }
             case ContentKind.FormUrlEncoded:
             {
-                var formFields = new List<object>();
+                var formFields = new List<FormFieldModel>();
                 foreach (var prop in requestBody.Schema.Properties)
                 {
                     var typeName = GetTypeName(prop.Schema);
                     var paramName = ToCamelCase(prop.CSharpName);
                     if (!prop.IsRequired)
                         typeName += "?";
-                    bodyParams.Add(new
+                    bodyParams.Add(new ParameterModel
                     {
                         type_name = typeName,
                         param_name = paramName,
                         is_required = prop.IsRequired,
                         default_value = prop.IsRequired ? (string?)null : "null",
+                        string_value_expr = BuildStringValueExpression(paramName, prop.Schema, prop.IsRequired),
                     });
-                    formFields.Add(new
+                    formFields.Add(new FormFieldModel
                     {
                         wire_name = prop.Name,
                         param_name = paramName,
                         is_required = prop.IsRequired,
+                        string_value_expr = BuildStringValueExpression(paramName, prop.Schema, prop.IsRequired),
                     });
                 }
 
-                return (new
+                return (new BodyModel
                 {
                     content_kind = contentKind,
                     param_name = (string?)null,
                     use_json_options = true,
-                    form_fields = (List<object>?)formFields,
-                    multipart_parts = (List<object>?)null,
+                    form_fields = formFields,
                 }, bodyParams);
             }
             case ContentKind.MultipartFormData:
             {
-                var parts = new List<object>();
+                var parts = new List<MultipartPartModel>();
                 foreach (var prop in requestBody.Schema.Properties)
                 {
                     var isBinary = prop.Schema.PrimitiveType == PrimitiveType.Stream;
@@ -322,7 +428,7 @@ public class ScribanClientEmitter : IClientEmitter
                     if (!prop.IsRequired)
                         typeName += "?";
 
-                    bodyParams.Add(new
+                    bodyParams.Add(new ParameterModel
                     {
                         type_name = typeName,
                         param_name = paramName,
@@ -334,7 +440,7 @@ public class ScribanClientEmitter : IClientEmitter
                     if (isBinary)
                     {
                         fileNameParamName = paramName + "FileName";
-                        bodyParams.Add(new
+                        bodyParams.Add(new ParameterModel
                         {
                             type_name = prop.IsRequired ? "string" : "string?",
                             param_name = fileNameParamName,
@@ -343,7 +449,7 @@ public class ScribanClientEmitter : IClientEmitter
                         });
                     }
 
-                    parts.Add(new
+                    parts.Add(new MultipartPartModel
                     {
                         wire_name = prop.Name,
                         param_name = paramName,
@@ -355,38 +461,35 @@ public class ScribanClientEmitter : IClientEmitter
                     });
                 }
 
-                return (new
+                return (new BodyModel
                 {
                     content_kind = contentKind,
                     param_name = (string?)null,
                     use_json_options = true,
-                    form_fields = (List<object>?)null,
-                    multipart_parts = (List<object>?)parts,
+                    multipart_parts = parts,
                 }, bodyParams);
             }
             case ContentKind.OctetStream:
             {
-                bodyParams.Add(new
+                bodyParams.Add(new ParameterModel
                 {
-                    type_name = "Stream",
+                    type_name = "System.IO.Stream",
                     param_name = "body",
                     is_required = true,
                     default_value = (string?)null,
                 });
 
-                return (new
+                return (new BodyModel
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
                     use_json_options = true,
-                    form_fields = (List<object>?)null,
-                    multipart_parts = (List<object>?)null,
                 }, bodyParams);
             }
             case ContentKind.PlainText:
             {
                 var typeName = requestBody.IsRequired ? "string" : "string?";
-                bodyParams.Add(new
+                bodyParams.Add(new ParameterModel
                 {
                     type_name = typeName,
                     param_name = "body",
@@ -394,13 +497,11 @@ public class ScribanClientEmitter : IClientEmitter
                     default_value = requestBody.IsRequired ? (string?)null : "null",
                 });
 
-                return (new
+                return (new BodyModel
                 {
                     content_kind = contentKind,
                     param_name = (string?)"body",
                     use_json_options = true,
-                    form_fields = (List<object>?)null,
-                    multipart_parts = (List<object>?)null,
                 }, bodyParams);
             }
             default:
@@ -408,29 +509,29 @@ public class ScribanClientEmitter : IClientEmitter
         }
     }
 
-    private (string returnType, string? responseType, dynamic responseModel) BuildResponseModel(ApiResponse? successResponse)
+    private (string returnType, string? responseType, ResponseModel responseModel) BuildResponseModel(ApiResponse? successResponse)
     {
         var hasResponseBody = successResponse?.HasBody == true;
         var contentKind = successResponse?.ContentKind?.ToString().ToLowerInvariant();
 
         if (!hasResponseBody)
         {
-            return ("Task", null, new { content_kind = (string?)null, use_json_options = true });
+            return ("Task", null, new ResponseModel());
         }
 
         if (successResponse!.ContentKind == ContentKind.OctetStream)
         {
-            return ("Task<FileResponse>", "FileResponse", new { content_kind = contentKind, use_json_options = true });
+            return ("Task<FileResponse>", "FileResponse", new ResponseModel { content_kind = contentKind });
         }
 
         if (successResponse.ContentKind == ContentKind.PlainText)
         {
-            return ("Task<string>", "string", new { content_kind = contentKind, use_json_options = true });
+            return ("Task<string>", "string", new ResponseModel { content_kind = contentKind });
         }
 
         var useJsonOptions = JsonSerializationCompatibility.ShouldUseGeneratedJsonOptions(successResponse.Schema!);
         var responseType = GetTypeName(successResponse.Schema!);
-        return ($"Task<{responseType}>", responseType, new { content_kind = contentKind, use_json_options = useJsonOptions });
+        return ($"Task<{responseType}>", responseType, new ResponseModel { content_kind = contentKind, use_json_options = useJsonOptions });
     }
 
     private static string ToCamelCase(string pascal)
@@ -440,7 +541,19 @@ public class ScribanClientEmitter : IClientEmitter
         return char.ToLowerInvariant(pascal[0]) + pascal[1..];
     }
 
-    private static object BuildParamModel(ApiParameter param, HashSet<string> queryEnums)
+    private static string BuildStringValueExpression(string paramName, ApiSchema schema, bool isRequired)
+    {
+        if (schema.Kind == SchemaKind.Array)
+            return $"string.Join(\",\", {paramName})";
+
+        var typeName = GetTypeName(schema);
+        if (string.Equals(typeName, "string", StringComparison.Ordinal))
+            return paramName;
+
+        return isRequired ? $"{paramName}.ToString()!" : $"{paramName}?.ToString()";
+    }
+
+    private static ParameterModel BuildParamModel(ApiParameter param, HashSet<string> queryEnums)
     {
         var typeName = GetTypeName(param.Schema);
         var isValueType = IsValueType(param.Schema);
@@ -457,7 +570,7 @@ public class ScribanClientEmitter : IClientEmitter
             && !(param.Schema.ArrayItemSchema?.IsExternal ?? false))
             queryEnums.Add(param.Schema.ArrayItemSchema!.Name);
 
-        return new
+        return new ParameterModel
         {
             type_name = typeName,
             param_name = param.CSharpName,
@@ -466,7 +579,7 @@ public class ScribanClientEmitter : IClientEmitter
         };
     }
 
-    private static object BuildQueryParamModel(ApiParameter param, HashSet<string> queryEnums)
+    private static QueryParameterModel BuildQueryParamModel(ApiParameter param, HashSet<string> queryEnums)
     {
         var isArray = param.Schema.Kind == SchemaKind.Array;
         var isEnum = param.Schema.Kind == SchemaKind.Enum;
@@ -474,6 +587,7 @@ public class ScribanClientEmitter : IClientEmitter
 
         var isExternalEnum = isEnum && param.Schema.IsExternal;
         var isExternalArrayOfEnum = isArrayOfEnum && (param.Schema.ArrayItemSchema?.IsExternal ?? false);
+        var itemName = $"{ToCamelCase(param.CSharpName)}Item";
 
         string toStringExpr;
         if (isEnum && !isExternalEnum)
@@ -488,15 +602,15 @@ public class ScribanClientEmitter : IClientEmitter
         else if (isArrayOfEnum && !isExternalArrayOfEnum)
         {
             queryEnums.Add(param.Schema.ArrayItemSchema!.Name);
-            toStringExpr = "item.ToQueryString()";
+            toStringExpr = $"{itemName}.ToQueryString()";
         }
         else if (isArrayOfEnum && isExternalArrayOfEnum)
         {
-            toStringExpr = "item.ToString()";
+            toStringExpr = $"{itemName}.ToString()";
         }
         else if (isArray)
         {
-            toStringExpr = "item.ToString()";
+            toStringExpr = $"{itemName}.ToString()";
         }
         else
         {
@@ -505,11 +619,11 @@ public class ScribanClientEmitter : IClientEmitter
 
         var isDeepObject = param.Style == Model.ParameterStyle.DeepObject;
         var isFlattened = isDeepObject && param.Schema.Kind == SchemaKind.Object && param.Schema.CSharpTypeName is null;
-        List<object>? deepObjectProps = null;
+        List<DeepObjectPropertyModel>? deepObjectProps = null;
         if (isDeepObject && param.Schema.Kind == SchemaKind.Object)
         {
             deepObjectProps = param.Schema.Properties
-                .Select(p => (object)new
+                .Select(p => new DeepObjectPropertyModel
                 {
                     wire_name = p.Name,
                     csharp_name = isFlattened ? ToCamelCase(p.CSharpName) : p.CSharpName,
@@ -517,10 +631,11 @@ public class ScribanClientEmitter : IClientEmitter
                 .ToList();
         }
 
-        return new
+        return new QueryParameterModel
         {
             wire_name = param.Name,
             param_name = param.CSharpName,
+            item_name = itemName,
             is_required = param.IsRequired,
             is_array = isArray,
             to_string_expr = toStringExpr,
@@ -532,11 +647,11 @@ public class ScribanClientEmitter : IClientEmitter
         };
     }
 
-    private static object BuildHeaderParamModel(ApiParameter param)
+    private static HeaderParameterModel BuildHeaderParamModel(ApiParameter param)
     {
         var toStringExpr = $"{param.CSharpName}{(param.IsRequired || !IsValueType(param.Schema) ? "" : ".Value")}.ToString()";
 
-        return new
+        return new HeaderParameterModel
         {
             wire_name = param.Name,
             param_name = param.CSharpName,
@@ -560,13 +675,15 @@ public class ScribanClientEmitter : IClientEmitter
     private GeneratedFile EmitInterface(
         string contractsNamespace,
         string modelsNamespace,
+        string infrastructureNamespace,
         string interfaceName,
-        List<object> operations,
+        List<OperationModel> operations,
         OutputStyle outputStyle)
     {
         var model = new ScriptObject();
         model.Add("namespace", contractsNamespace);
         model.Add("models_namespace", modelsNamespace);
+        model.Add("infrastructure_namespace", infrastructureNamespace);
         model.Add("interface_name", interfaceName);
         model.Add("operations", operations);
 
@@ -585,14 +702,10 @@ public class ScribanClientEmitter : IClientEmitter
         string jsonOptionsName,
         string problemDetailsTypeName,
         bool hasProblemDetailsSupport,
-        List<object> operations,
+        List<OperationModel> operations,
         OutputStyle outputStyle)
     {
-        var hasQueryMethods = operations.Any(o =>
-        {
-            var so = o as dynamic;
-            return (bool)so.has_query_params;
-        });
+        var hasQueryMethods = operations.Any(o => o.has_query_params);
 
         var model = new ScriptObject();
         model.Add("namespace", clientsNamespace);
@@ -667,7 +780,7 @@ public class ScribanClientEmitter : IClientEmitter
     }
 
     private GeneratedFile EmitDiRegistration(
-        string ns, string clientName, string optionsClassName, string jsonOptionsName, List<object> tagClients, OutputStyle outputStyle)
+        string ns, string clientName, string optionsClassName, string jsonOptionsName, List<TagClientModel> tagClients, OutputStyle outputStyle)
     {
         var extensionsClassName = $"{clientName}ServiceCollectionExtensions";
 
@@ -748,7 +861,11 @@ public class ScribanClientEmitter : IClientEmitter
 
     private static GeneratedFile RenderTemplate(Template template, string fileName, ScriptObject model)
     {
-        var context = new TemplateContext();
+        var context = new TemplateContext
+        {
+            LoopLimit = 100_000,
+            LimitToString = 0,
+        };
         context.PushGlobal(model);
         var content = template.Render(context).TrimEnd() + "\n";
         return new GeneratedFile(fileName, content);

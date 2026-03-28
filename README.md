@@ -145,6 +145,13 @@ dotnet test
 
 Requires the .NET 10 SDK.
 
+If you want to run the full integration corpus locally, install Git LFS and fetch LFS-managed fixtures before running tests:
+
+```bash
+git lfs install
+git lfs pull
+```
+
 ## Current Status
 
 ApiStitch is under active development. What works today:

@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.0-alpha.7 — 2026-03-28
+
+### Added
+
+- Added a pinned real-world OpenAPI regression corpus in integration tests, covering GitHub REST, Stripe, DigitalOcean, and Microsoft Graph snapshots
+
 ### Fixed
 
 - Source Link debugging now works correctly for CI-built packages (deterministic build paths)
+- Improved generator resilience against large and irregular real-world specs, including Scriban rendering limits, identifier collisions, inherited-property flattening, synthesized missing path parameters, and several client-emission edge cases
 
 ## 0.1.0-alpha.6 — 2026-02-28
 

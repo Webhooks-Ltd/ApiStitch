@@ -131,6 +131,10 @@ public class SchemaTransformer
 
         var required = new HashSet<string>(openApiSchema.Required ?? new HashSet<string>(), StringComparer.Ordinal);
         var properties = new List<ApiProperty>();
+        var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            name,
+        };
 
         foreach (var (propName, propSchema) in openApiSchema.Properties ?? new Dictionary<string, IOpenApiSchema>())
         {
@@ -138,7 +142,7 @@ public class SchemaTransformer
             properties.Add(new ApiProperty
             {
                 Name = propName,
-                CSharpName = NamingHelper.ToPascalCase(propName),
+                CSharpName = NamingHelper.ResolveCollision(NamingHelper.ToPascalCase(propName), usedPropertyNames),
                 Schema = propApiSchema,
                 IsRequired = required.Contains(propName),
                 IsDeprecated = propSchema.Deprecated,
@@ -162,6 +166,7 @@ public class SchemaTransformer
             return TransformPrimitive(openApiSchema, name, originalName, source);
         }
 
+        var usedMemberNames = new HashSet<string>(StringComparer.Ordinal);
         var members = openApiSchema.Enum!
             .Select(e =>
             {
@@ -169,7 +174,9 @@ public class SchemaTransformer
                 return new ApiEnumMember
                 {
                     Name = value,
-                    CSharpName = NamingHelper.ToPascalCase(value),
+                    CSharpName = NamingHelper.ResolveCollision(
+                        NamingHelper.ToPascalCase(value),
+                        usedMemberNames),
                     Description = null,
                 };
             })
@@ -249,6 +256,10 @@ public class SchemaTransformer
         var mergedRequired = new HashSet<string>(openApiSchema.Required ?? new HashSet<string>(), StringComparer.Ordinal);
         var refTargets = new List<ApiSchema>();
         var hasInlineProperties = false;
+        var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            name,
+        };
 
         foreach (var allOfEntry in openApiSchema.AllOf!)
         {
@@ -266,6 +277,7 @@ public class SchemaTransformer
                             source));
                     }
                     mergedProperties[prop.Name] = prop;
+                    usedPropertyNames.Add(prop.CSharpName);
                 }
 
                 foreach (var req in allOfEntry.Required ?? new HashSet<string>())
@@ -291,7 +303,7 @@ public class SchemaTransformer
                     mergedProperties[propName] = new ApiProperty
                     {
                         Name = propName,
-                        CSharpName = NamingHelper.ToPascalCase(propName),
+                        CSharpName = NamingHelper.ResolveCollision(NamingHelper.ToPascalCase(propName), usedPropertyNames),
                         Schema = propApiSchema,
                         IsRequired = mergedRequired.Contains(propName),
                         IsDeprecated = propSchema.Deprecated,

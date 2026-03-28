@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <None Update="Specs\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="RealSpecs\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
